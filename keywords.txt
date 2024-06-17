@@ -1,0 +1,12 @@
+ICM456xx	KEYWORD1
+begin	KEYWORD2
+startAccel	KEYWORD2
+startGyro	KEYWORD2
+getDataFromRegisters	KEYWORD2
+enableFifoInterrupt	KEYWORD2
+getDataFromFifo	KEYWORD2
+startGaf	KEYWORD2
+getGafData	KEYWORD2
+inv_imu_sensor_data_t		KEYWORD2
+inv_imu_fifo_data_t		KEYWORD2
+inv_imu_edmp_gaf_outputs_t		KEYWORD2
