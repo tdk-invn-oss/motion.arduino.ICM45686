@@ -122,7 +122,7 @@ int ICM456xx::begin() {
   icm_driver.transport.sleep_us = sleep_us;
   
   /* Disable APEX features */
-  for(int i; i < ICM456XX_APEX_NB; i++)
+  for(int i=0; i < ICM456XX_APEX_NB; i++)
   {
     apex_enable[i] = false;
   }
@@ -481,7 +481,7 @@ int ICM456xx::startWakeOnMotion(uint8_t intpin, ICM456xx_irq_handler handler)
   inv_imu_set_config_int(&icm_driver,INV_IMU_INT1, &config_int);
 
   /* All othher APEX disabled */
-  for(int i; i < ICM456XX_APEX_NB; i++)
+  for(int i=0; i < ICM456XX_APEX_NB; i++)
   {
     apex_enable[i] = false;
   }
