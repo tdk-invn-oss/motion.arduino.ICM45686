@@ -39,7 +39,6 @@ void setup() {
   
   // Enable Tilt interrupt on pin 2, Fifo watermark=10
   IMU.startTiltDetection(2,irq_handler);
-
 }
 
 void loop() {

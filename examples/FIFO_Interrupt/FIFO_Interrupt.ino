@@ -57,17 +57,23 @@ void loop() {
       IMU.getDataFromFifo(imu_data);
       // Format data for Serial Plotter
       Serial.print("AccelX:");
-      Serial.println(imu_data.byte_16.accel_data[0]);
+      Serial.print(imu_data.byte_16.accel_data[0]);
+      Serial.print(",");
       Serial.print("AccelY:");
-      Serial.println(imu_data.byte_16.accel_data[1]);
+      Serial.print(imu_data.byte_16.accel_data[1]);
+      Serial.print(",");
       Serial.print("AccelZ:");
-      Serial.println(imu_data.byte_16.accel_data[2]);
+      Serial.print(imu_data.byte_16.accel_data[2]);
+      Serial.print(",");
       Serial.print("GyroX:");
-      Serial.println(imu_data.byte_16.gyro_data[0]);
+      Serial.print(imu_data.byte_16.gyro_data[0]);
+      Serial.print(",");
       Serial.print("GyroY:");
-      Serial.println(imu_data.byte_16.gyro_data[1]);
+      Serial.print(imu_data.byte_16.gyro_data[1]);
+      Serial.print(",");
       Serial.print("GyroZ:");
-      Serial.println(imu_data.byte_16.gyro_data[2]);
+      Serial.print(imu_data.byte_16.gyro_data[2]);
+      Serial.print(",");
       Serial.print("Temperature:");
       Serial.println(imu_data.byte_16.temp_data);
     }

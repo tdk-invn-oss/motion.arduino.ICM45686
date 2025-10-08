@@ -47,12 +47,13 @@ void setup() {
 void loop() {
   if(irq_received)
   {
-    if(IMU.getRaiseToWake())
-    {
+    int ret = IMU.getRaiseToWake();
+  
+    if(ret == 1)
       Serial.println("Wake-up");
-    } else {
+    else if (ret == 2)
       Serial.println("Going to sleep");
-	}
+
     irq_received = false;
   }
 }

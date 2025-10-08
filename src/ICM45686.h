@@ -22,22 +22,33 @@
 #include "SPI.h"
 #include "Wire.h"
 
-#define ICM45686
-
 extern "C" {
 #include "imu/inv_imu_driver_advanced.h"
 #include "imu/inv_imu_edmp.h"
+#include "invn/InvError.h"
 #if defined(ICM45686S) || defined(ICM45605S)
 #include "imu/inv_imu_edmp_gaf.h"
 #endif
 }
+
+// algo 0, enable GRV when enable 6-axis(AG)
+// algo 1, enable GMRV when enable 6-axis(AM)
+// algo 2, enable RV when enable 9-axis(AGM)
+enum {
+  ALGO_GRV = 0,
+  ALGO_GMRV,
+  ALGO_RV
+};
 
 enum {
   ICM456XX_APEX_TILT=0,
   ICM456XX_APEX_PEDOMETER,
   ICM456XX_APEX_TAP,
   ICM456XX_APEX_R2W,
-  ICM456XX_APEX_NB,
+  ICM456XX_APEX_FF,
+  ICM456XX_APEX_LOWG,
+  ICM456XX_APEX_HIGHG,
+  ICM456XX_APEX_MAX
 };
 
 // This defines the handler called when retrieving a sample from the FIFO
@@ -57,24 +68,35 @@ class ICM456xx {
     int getDataFromRegisters(inv_imu_sensor_data_t& data);
     int enableFifoInterrupt(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t fifo_watermark);
     int getDataFromFifo(inv_imu_fifo_data_t& data);
-#if defined(ICM45686S) || defined(ICM45605S)
-    int startGaf(uint8_t intpin, ICM456xx_irq_handler handler);
+#if defined(ICM45686S) || defined(ICM45605S) || defined(ICM45608) || defined(ICM45689)
+    int startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t algo);
     int getGafData(inv_imu_edmp_gaf_outputs_t& gaf_outputs);
-    int getGafData(float& quatW,float& quatX,float& quatY,float& quatZ);
+    int getGaf_GRVData(float& quatW,float& quatX,float& quatY,float& quatZ);
+    int getGaf_GMRVData(float& quatW,float& quatX,float& quatY,float& quatZ);    
+    int getGaf_RVData(float& quatW,float& quatX,float& quatY,float& quatZ);
+    int getGaf_RMData(float& mX,float& mY, float& mZ);
 #endif
     int stopAccel(void);
     int stopGyro(void);
     int startTiltDetection(uint8_t intpin=2, ICM456xx_irq_handler handler=NULL);
     int startPedometer(uint8_t intpin=2, ICM456xx_irq_handler handler=NULL);
+    int startFreeFall(uint8_t intpin=2, ICM456xx_irq_handler handler=NULL);
+    int startHighG(uint8_t intpin=2, ICM456xx_irq_handler handler=NULL);
+    int startLowG(uint8_t intpin=2, ICM456xx_irq_handler handler=NULL);
     int getPedometer(uint32_t& step_count, float& step_cadence, char*& activity);
     int startWakeOnMotion(uint8_t intpin, ICM456xx_irq_handler handler);
     int startTap(uint8_t intpin=2, ICM456xx_irq_handler handler=NULL);
-    bool getTilt(void);
+    int startRaiseToWake(uint8_t intpin=2, ICM456xx_irq_handler handler=NULL);    
+    int getTilt(void);
     int getTap(uint8_t& tap_count, uint8_t& axis, uint8_t& direction);
-    int startRaiseToWake(uint8_t intpin=2, ICM456xx_irq_handler handler=NULL);
     int getRaiseToWake(void);
+    int getFreefall(uint32_t& duration_ms);
+    int getHighG(void);
+    int getLowG(void);
+
     int updateApex(void);
     int setApexInterrupt(uint8_t intpin, ICM456xx_irq_handler handler);
+
     inv_imu_edmp_int_state_t apex_status;
 
   protected:
@@ -86,7 +108,7 @@ class ICM456xx {
     int setup_irq(uint8_t intpin, ICM456xx_irq_handler handler);
     int startAPEX(dmp_ext_sen_odr_cfg_apex_odr_t edmp_odr, accel_config0_accel_odr_t accel_odr);
     uint32_t step_cnt_ovflw;
-    bool apex_enable[ICM456XX_APEX_NB];
+    bool apex_enable[ICM456XX_APEX_MAX];
     dmp_ext_sen_odr_cfg_apex_odr_t apex_edmp_odr;
     accel_config0_accel_odr_t apex_accel_odr;
 };

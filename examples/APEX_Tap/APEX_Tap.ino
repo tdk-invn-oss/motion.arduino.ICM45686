@@ -54,10 +54,12 @@ void loop() {
     uint8_t direction=0;
     irq_received = false;
     IMU.getTap(tap_count,axis,direction);
-    Serial.print("Tap count:");
-    Serial.println(tap_count);
+    Serial.print("Tap_count:");
+    Serial.print(tap_count);
+    Serial.print(",");
     Serial.print("Axis:");
-    Serial.println(axis_str[axis]);
+    Serial.print(axis_str[axis]);
+    Serial.print(",");
     Serial.print("Direction:");
     Serial.println(direction_str[direction]);
   }

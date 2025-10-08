@@ -40,14 +40,22 @@ void setup() {
     Serial.println(ret);
     while(1);
   }
+
   // APEX Tilt enabled
   IMU.startTiltDetection();
   // APEX Pedometer enabled
   IMU.startPedometer();
-  // APEX Tap enabled
-  IMU.startTap();
   // APEX Raise to wake enabled
   IMU.startRaiseToWake();
+  // APEX Tap enabled
+  IMU.startTap();
+  // APEX Freefall enabled  
+  IMU.startFreeFall();
+  // APEX HighG enabled
+  IMU.startHighG();
+  // APEX LowG enabled    
+  IMU.startLowG();
+
   IMU.setApexInterrupt(2,irq_handler);
 }
 
@@ -55,42 +63,68 @@ void loop() {
   // Wait for interrupt to read data Pedometer status
   if(irq_received) {
     irq_received = 0;
-    uint32_t step_count=0;
-    float step_cadence=0;
-    char* activity;
     uint8_t tap_count=0;
     uint8_t axis=0;
     uint8_t direction=0;
+    char* activity;
+    uint32_t step_count=0;
+    float step_cadence=0;
     int raise_to_wake = 0;
-    if(IMU.getTilt())
+
+    if(IMU.getTilt() == 1)
     {
-      Serial.println("TILT");
+      Serial.print("Tilt Event");
     }
-    if(IMU.getPedometer(step_count,step_cadence,activity) == 0)
+    
+    if(IMU.getPedometer(step_count,step_cadence,activity) == 1)
     {
-      Serial.print("Step count:");
-      Serial.println(step_count);
-      Serial.print("Step cadence:");
-      Serial.println(step_cadence);
+      Serial.print(" Step count:");
+      Serial.print(step_count);
+      Serial.print(",");
+      Serial.print("Step cadence(steps/s):");
+      Serial.print(step_cadence);
+      Serial.print(",");
       Serial.print("activity:");
-      Serial.println(activity);
+      Serial.print(activity);
     }
-    if(IMU.getTap(tap_count,axis,direction)==0)
-    {
-      Serial.print("Tap count:");
-      Serial.println(tap_count);
-      Serial.print("Axis:");
-      Serial.println(axis_str[axis]);
-      Serial.print("Direction:");
-      Serial.println(direction_str[direction]);
-    }
+
     raise_to_wake = IMU.getRaiseToWake();
+
     if(raise_to_wake == 1)
     {
-      Serial.println("R2W Wake-up");
-    } else if (raise_to_wake == 0)
+      Serial.print(" R2W Wake-up");
+    } 
+    else if (raise_to_wake == 2)
     {
-      Serial.println("R2W Sleep");
+      Serial.print(" R2W Sleep");
     }
+    
+    uint32_t duration_ms;  
+    if(IMU.getFreefall(duration_ms) == 1)
+    {
+      Serial.print(" FreeFall Event duration(ms):");
+      Serial.print(duration_ms);
+    }
+
+    if(IMU.getHighG() == 1)
+      Serial.print(" HighG Event");
+
+    if(IMU.getLowG() == 1)
+      Serial.print(" LowG Event");
+
+    if(IMU.getTap(tap_count,axis,direction) == 1)
+    {
+      Serial.print(" Tap count:");
+      Serial.print(tap_count);
+      Serial.print(",");
+      Serial.print("Axis:");
+      Serial.print(axis_str[axis]);
+      Serial.print(",");
+      Serial.print("Direction:");
+      Serial.print(direction_str[direction]);
+    }
+
+    Serial.println("");
   }
 }
+

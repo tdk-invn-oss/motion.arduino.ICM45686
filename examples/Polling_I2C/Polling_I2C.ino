@@ -49,19 +49,26 @@ void loop() {
 
   // Format data for Serial Plotter
   Serial.print("AccelX:");
-  Serial.println(imu_data.accel_data[0]);
+  Serial.print(imu_data.accel_data[0]);
+  Serial.print(",");
   Serial.print("AccelY:");
-  Serial.println(imu_data.accel_data[1]);
+  Serial.print(imu_data.accel_data[1]);
+  Serial.print(",");
   Serial.print("AccelZ:");
-  Serial.println(imu_data.accel_data[2]);
+  Serial.print(imu_data.accel_data[2]);
+  Serial.print(",");
   Serial.print("GyroX:");
-  Serial.println(imu_data.gyro_data[0]);
+  Serial.print(imu_data.gyro_data[0]);
+  Serial.print(",");  
   Serial.print("GyroY:");
-  Serial.println(imu_data.gyro_data[1]);
+  Serial.print(imu_data.gyro_data[1]);
+  Serial.print(",");
   Serial.print("GyroZ:");
-  Serial.println(imu_data.gyro_data[2]);
+  Serial.print(imu_data.gyro_data[2]);
+  Serial.print(",");
   Serial.print("Temperature:");
-  Serial.println(imu_data.temp_data);
+  Serial.print(imu_data.temp_data);
+  Serial.println("");
 
   // Run @ ODR 100Hz
   delay(10);

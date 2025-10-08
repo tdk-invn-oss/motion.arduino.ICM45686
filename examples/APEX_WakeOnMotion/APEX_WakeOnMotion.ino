@@ -42,14 +42,13 @@ void setup() {
   // APEX WoM enabled, irq on pin 2
   IMU.startWakeOnMotion(2,irq_handler);
   Serial.println("Going to sleep");
-
 }
 
 void loop() {
   if(wake_up)
   {
     Serial.println("Wake-up");
-	delay(2000);
+    delay(2000);
     wake_up = false;
     Serial.println("Going to sleep");
   }

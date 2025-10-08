@@ -51,11 +51,14 @@ void loop() {
     char* activity;
     irq_received = 0;
     IMU.getPedometer(step_count,step_cadence,activity);
-    Serial.print("Step count:");
-    Serial.println(step_count);
-    Serial.print("Step cadence:");
-    Serial.println(step_cadence);
+    Serial.print("Step_count:");
+    Serial.print(step_count);
+    Serial.print(",");
+    Serial.print("Step_cadence:");
+    Serial.print(step_cadence);
+    Serial.print(",");
     Serial.print("activity:");
-    Serial.println(activity);
+    Serial.print(activity);
+    Serial.println("");
   }
 }
