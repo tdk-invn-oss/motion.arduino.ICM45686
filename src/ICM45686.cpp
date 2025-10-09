@@ -304,7 +304,9 @@ int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t alg
   fifo_config.base_conf.fifo_depth = FIFO_CONFIG0_FIFO_DEPTH_APEX;
   fifo_config.base_conf.fifo_wm_th = 1;
   fifo_config.es1_en			   = INV_IMU_ENABLE;
+  fifo_config.es0_en               = INV_IMU_ENABLE;
   fifo_config.tmst_fsync_en 	   = INV_IMU_ENABLE;
+  fifo_config.es0_6b_9b            = FIFO_CONFIG4_FIFO_ES0_9B;
 
   rc |= inv_imu_edmp_init(&icm_driver);
   rc |= inv_imu_edmp_get_gaf_parameters(&icm_driver, &gaf_params);
@@ -320,6 +322,8 @@ int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t alg
   int32_t mag_bias_q16[3]= {0,0,0};
 
   rc |= inv_imu_edmp_set_frequency(&icm_driver, DMP_EXT_SEN_ODR_CFG_APEX_ODR_100_HZ);
+  rc |= inv_imu_set_accel_frequency(&icm_driver, ACCEL_CONFIG0_ACCEL_ODR_100_HZ);
+  rc |= inv_imu_set_gyro_frequency(&icm_driver, GYRO_CONFIG0_GYRO_ODR_100_HZ);
   rc |= inv_imu_edmp_set_gaf_acc_bias(&icm_driver, acc_bias_q16);
   rc |= inv_imu_edmp_set_gaf_gyr_bias(&icm_driver, gyr_bias_q16, 0, 0);
   rc |= inv_imu_edmp_set_gaf_mag_bias(&icm_driver, mag_bias_q16, 0);
@@ -530,7 +534,7 @@ static void sensor_event_cb(inv_imu_sensor_event_t *event)
     gaf_status = inv_imu_edmp_gaf_build_outputs(icm_driver_ptr, (const uint8_t *)event->es0, &gaf_outputs_internal);
   }
 #elif defined(ICM45608) || defined(ICM45689) 
-  if (event->sensor_mask & ((1 << INV_SENSOR_ES0) | (1 << INV_SENSOR_ES1))) {
+  if (event->sensor_mask & ((1 << INV_SENSOR_ES0) | (1 << INV_SENSOR_ES1)) == ((1 << INV_SENSOR_ES0) | (1 << INV_SENSOR_ES1))) {
     memset(&gaf_outputs_internal, 0, sizeof(gaf_outputs_internal));
     inv_imu_edmp_gaf_decode_fifo(icm_driver_ptr, (const uint8_t *)event->es0,
                                  (const uint8_t *)event->es1, &gaf_outputs_internal);
