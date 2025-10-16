@@ -27,8 +27,8 @@ The below wiring description is given for an Arduino Zero board, it depends on t
 | --- | --- |
 | 5V         | CN1.19         |
 | GND        | CN1.11         |
-| MISO=SPI.1 | CN1.18         |
-| MOSI=SPI.4 | CN1.20         |
+| MISO=SPI.1 | CN1.20         |
+| MOSI=SPI.4 | CN1.18         |
 | SCK=SPI.3  | CN1.16         |
 | CS=DIG.8   | CN1.4          |
 
