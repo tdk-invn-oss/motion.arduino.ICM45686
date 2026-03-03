@@ -19,10 +19,9 @@
 #include "ICM45686.h"
 #if defined(ICM45686S) || defined(ICM45605S)
 #include "imu/inv_imu_edmp_gaf.h"
-#endif
-#if defined(ICM45608) || defined(ICM45689)
+#else
 #include "invn_mag.h"
-
+#include "Ict1531x/Ict1531x.h"
 /* 
  * Soft-iron matrix applied to mag data in EDMP
  * Align mag axis to IMU
@@ -32,6 +31,11 @@ static int32_t soft_iron_matrix[3][3] = {
 	{ 0, (1 << 30), 0 },
 	{ 0, 0, (1 << 30) },
 };
+
+#endif
+
+#if defined(ICM45605) || defined(ICM45686) || defined(ICM45688P)
+#include "imu/inv_imu_edmp_compass.h"
 #endif
 
 static int i2c_write(uint8_t reg, const uint8_t * wbuffer, uint32_t wlen);
@@ -60,13 +64,18 @@ static uint8_t chip_select_id = 0;
 // i2c/spi clock frequency
 static uint32_t clk_freq = 0;
 
+bool I2CM_EXAM = false;
+int32_t accel_data[3];
+int32_t gyro_data[3];
+float mag_data[3];
+
 /*
  * WOM threshold value in mg.
  * 1g/256 resolution (wom_th = mg * 256 / 1000)
  */
 #define DEFAULT_WOM_THS_MG 52 >> 2 // 52 mg
 
-#if defined(ICM45686S) || defined(ICM45605S) || defined(ICM45608) || defined(ICM45689)
+#if defined(ICM45605S)|| defined(ICM45608) || defined(ICM45686S) || defined(ICM45689) 
 #define RAW_MAG_SCALE (4915) /* 0.075 * (2 << 16) */
 // GAF output aggregartion
 static inv_imu_edmp_gaf_outputs_t gaf_outputs_internal = {0};
@@ -149,7 +158,7 @@ int ICM456xx::begin() {
   icm_driver_ptr = &icm_driver;
 
   sleep_us(3000);
- 
+
   return inv_imu_adv_init(&icm_driver);
 }
 
@@ -200,13 +209,31 @@ int ICM456xx::setup_irq(uint8_t intpin, ICM456xx_irq_handler handler)
   return rc;
 }
 
+static int inv_init_i2cm_bypass(inv_imu_device_t *s)
+{
+  int status = INV_IMU_OK;
+  ioc_pad_scenario_aux_ovrd_t ioc_pad_scenario_aux_ovrd;
+
+  uint8_t                   data = 0x1b;
+
+  /* Force AUX1 in I2CM master mode */
+  status |=
+    inv_imu_read_reg(s, IOC_PAD_SCENARIO_AUX_OVRD, 1, (uint8_t *)&ioc_pad_scenario_aux_ovrd);
+  ioc_pad_scenario_aux_ovrd.aux1_mode_ovrd     = 1;
+  ioc_pad_scenario_aux_ovrd.aux1_mode_ovrd_val = 2;
+  status |=
+    inv_imu_write_reg(s, IOC_PAD_SCENARIO_AUX_OVRD, 1, (uint8_t *)&ioc_pad_scenario_aux_ovrd);
+
+  return status;
+}
+
 int ICM456xx::enableFifoInterrupt(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t fifo_watermark) {
   int rc = 0;
   inv_imu_int_state_t it_conf;
   const inv_imu_fifo_config_t fifo_config = {
     .gyro_en=true,
     .accel_en=true,
-    . hires_en=false,
+    .hires_en=false,
     .fifo_wm_th=fifo_watermark,
     .fifo_mode=FIFO_CONFIG0_FIFO_MODE_SNAPSHOT,
     .fifo_depth=FIFO_CONFIG0_FIFO_DEPTH_MAX
@@ -226,7 +253,7 @@ int ICM456xx::getDataFromFifo(inv_imu_fifo_data_t& data) {
   return inv_imu_get_fifo_frame(&icm_driver,&data);
 }
 
-#if defined(ICM45686S) || defined(ICM45605S) || defined(ICM45608) || defined(ICM45689)
+#if defined(ICM45605S) || defined(ICM45686S) || defined(ICM45608)  || defined(ICM45689)
 int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t algo)
 {
   int rc = 0;
@@ -275,6 +302,7 @@ int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t alg
 
   if (mag_is_on) {
   	rc = invn_mag_init(&icm_driver);
+
     if (rc != 0)
 	{
       mag_is_on = 0;
@@ -285,7 +313,7 @@ int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t alg
   
   rc |= inv_imu_edmp_set_frequency(&icm_driver, DMP_EXT_SEN_ODR_CFG_APEX_ODR_100_HZ);
 
-#if defined(ICM45686S) || defined(ICM45605S)
+#if defined(ICM45605S) || defined(ICM45686S)
   fifo_config.base_conf.fifo_depth = FIFO_CONFIG0_FIFO_DEPTH_GAF;
 
   /* Load APEX algorithm GAF in DMP RAM */
@@ -392,7 +420,7 @@ int ICM456xx::getGafData(inv_imu_edmp_gaf_outputs_t& gaf_outputs)
   return 0;
 }
 
-#if defined(ICM45686S) || defined(ICM45605S)
+#if defined(ICM45605S) || defined(ICM45686S)
 int ICM456xx::getGaf_GRVData(float& quatW,float& quatX,float& quatY,float& quatZ)
 {
   int rc = 0;
@@ -429,8 +457,7 @@ int ICM456xx::getGaf_RMData(float& mX, float& mY, float& mZ)
   return 0;
 }
 
-
-#else /* defined(ICM45686S) || defined(ICM45605S) */
+#else /* defined(ICM45605S) || defined(ICM45686S) */
 
 int ICM456xx::getGaf_GRVData(float& quatW,float& quatX,float& quatY,float& quatZ)
 {
@@ -509,8 +536,247 @@ int ICM456xx::getGaf_RMData(float& mX, float& mY, float& mZ)
 #endif /* defined(ICM45608) || defined(ICM45689) */
 #endif /* defined(ICM45686S) || defined(ICM45605S) || defined(ICM45608) || defined(ICM45689) */
 
-int32_t accel_data[3];
-int32_t gyro_data[3];
+#if defined(ICM45605) || defined(ICM45686) || defined(ICM45608) || defined(ICM45688P) || defined(ICM45689)
+
+#define MAG_I2C_ADDR 0x1E
+
+static int wait_for_i2c_master_complete(inv_imu_device_t *icm_driver)
+{
+  uint64_t start;
+  uint64_t cur = 0;
+  inv_imu_int_state_t int_state;
+
+  while (1) {
+    inv_imu_get_int_status(icm_driver, INV_IMU_INT1, &int_state);
+    if (int_state.INV_I2CM_DONE) {
+      i2cm_status_t i2cm_status;
+
+      inv_imu_read_reg(icm_driver, I2CM_STATUS, 1, (uint8_t *)&i2cm_status);
+      if (i2cm_status.i2cm_busy || i2cm_status.i2cm_timeout_err ||
+          i2cm_status.i2cm_srst_err || i2cm_status.i2cm_scl_err ||
+          i2cm_status.i2cm_sda_err)
+        return -1;
+      return 0;
+    }
+  }
+
+  return -2;
+}
+
+int ICM456xx::setI2CM(void)
+{
+  int rc = 0;
+  uint8_t data  =0;
+  inv_imu_int_state_t int1_config;
+
+  rc = inv_imu_init_i2cm(&icm_driver);
+  rc |= inv_imu_get_config_int(&icm_driver, INV_IMU_INT1, &int1_config);
+  int1_config.INV_I2CM_DONE = INV_IMU_ENABLE;
+  rc |= inv_imu_set_config_int(&icm_driver, INV_IMU_INT1, &int1_config);  
+  return rc;
+}
+
+int ICM456xx::getDataFromI2CM(uint8_t reg, uint8_t& data)
+{
+  int rc;
+  /* read register from ICT1531 */
+  inv_imu_i2c_master_cfg_t cfg = { .op_cnt   = 1,
+                                   .i2c_addr = MAG_I2C_ADDR,
+                                   .op 	  = { /* op[0] */
+                                             {
+                                               .r_n_w	   = 1,
+                                               .reg_addr = reg,
+                                               .len      = 1
+                                  } } };
+  
+  rc |= inv_imu_configure_i2cm(&icm_driver, &cfg, NULL);
+  rc |= inv_imu_start_i2cm_ops(&icm_driver, 1 /* fast_mode */);
+  rc |= wait_for_i2c_master_complete(&icm_driver);
+  rc |= inv_imu_get_i2cm_data(&icm_driver, &data, 1);
+
+  return rc;
+}
+
+int ICM456xx::setI2CMPassThrough(void)
+{
+  return inv_init_i2cm_bypass(&icm_driver);
+}
+
+int ICM456xx::getDataFromPassThrough(uint8_t reg, uint8_t& data)
+{
+  int rc;
+  /* directly read register from ICT1531 */
+  i2c_address = MAG_I2C_ADDR;
+  rc = inv_imu_read_reg(&icm_driver, reg, 1, (uint8_t *)&data);
+  i2c_address = ICM456xx_I2C_ADDRESS;
+  return rc;
+}
+
+static uint8_t fifo_data[FIFO_MIRRORING_SIZE]; /* Memory where to store FIFO data */
+
+int ICM456xx::adv_getDataFromFifo(void)
+{
+  uint16_t fifo_count = 0;
+  inv_imu_adv_get_data_from_fifo(&icm_driver, fifo_data, &fifo_count);
+  inv_imu_adv_parse_fifo_data(&icm_driver, fifo_data, fifo_count);
+  return 0;
+}
+
+#if defined(ICM45605) || defined(ICM45686) || defined(ICM45688P)
+int ICM456xx::setI2CM_FIFO(uint8_t intpin, ICM456xx_irq_handler handler)
+{
+  int rc = 0;
+  uint8_t data  =0;
+  inv_imu_int_state_t int1_config;
+  inv_imu_int_pin_config_t  int_pin_config;
+  inv_imu_adv_fifo_config_t fifo_config;
+  inv_imu_edmp_apex_parameters_t apex_inputs;
+  uint8_t wdata = 0x12;
+
+  inv_imu_i2c_master_cfg_t cfg = { .op_cnt	= 2,
+                                   .i2c_addr = MAG_I2C_ADDR,
+                                   .op	  = { /* op[0] */
+                                            {
+                                                 .r_n_w    = 1,
+                                                 .reg_addr = ICT1531X_TEMP_DATA_MSB,
+                                                 .len	   = 7
+                                            },
+                                            {
+                                                 .r_n_w    = 0,
+                                                 .reg_addr = ICT1531X_MODE_CTRL_REG,
+                                                 .len	   = 1,
+                                                 .wdata = &wdata
+                                            }
+                                  } };
+
+  int_pin_config.int_polarity = INTX_CONFIG2_INTX_POLARITY_HIGH;
+  int_pin_config.int_mode     = INTX_CONFIG2_INTX_MODE_PULSE;
+  int_pin_config.int_drive    = INTX_CONFIG2_INTX_DRIVE_PP;
+  rc |= inv_imu_set_pin_config_int(&icm_driver, INV_IMU_INT1, &int_pin_config);
+
+  /* Interrupts configuration */
+  memset(&int1_config, INV_IMU_DISABLE, sizeof(int1_config));
+  int1_config.INV_FIFO_THS = INV_IMU_ENABLE;
+  rc |= inv_imu_set_config_int(&icm_driver, INV_IMU_INT1, &int1_config);
+
+  /* FIFO configuration */
+  rc |= inv_imu_adv_get_fifo_config(&icm_driver, &fifo_config);
+  fifo_config.base_conf.gyro_en    = 1;
+  fifo_config.base_conf.accel_en   = 1;
+  fifo_config.base_conf.hires_en   = 0;
+  fifo_config.base_conf.fifo_depth = FIFO_CONFIG0_FIFO_DEPTH_APEX;
+  fifo_config.base_conf.fifo_wm_th = 1;
+  fifo_config.base_conf.fifo_mode  = FIFO_CONFIG0_FIFO_MODE_SNAPSHOT;
+  fifo_config.tmst_fsync_en        = INV_IMU_ENABLE;
+  fifo_config.fifo_wr_wm_gt_th     = FIFO_CONFIG2_FIFO_WR_WM_EQ_OR_GT_TH;
+  fifo_config.es0_en               = 1;
+  fifo_config.es1_en               = 0;
+  /* eDMP image will read external data and output 6 bytes in FIFO ES0 frame bitfield */
+  fifo_config.es0_6b_9b = FIFO_CONFIG4_FIFO_ES0_6B;
+  rc |= inv_imu_adv_set_fifo_config(&icm_driver, &fifo_config);
+
+  rc = invn_mag_init(&icm_driver);
+  rc |= inv_imu_edmp_compass_set_frequency(&icm_driver, DMP_EXT_SEN_ODR_CFG_EXT_ODR_25_HZ);
+  rc |= inv_imu_configure_i2cm(&icm_driver, &cfg, NULL);
+  
+  /* Run eDMP init and load RAM image */
+  rc |= inv_imu_edmp_compass_init(&icm_driver);
+
+  /* Configure eDMP to get compass data from external sensor */
+  rc |= inv_imu_edmp_compass_enable_es(&icm_driver);
+  
+  /* Reset FIFO */
+  rc |= inv_imu_adv_reset_fifo(&icm_driver);
+  
+  /* Enable eDMP */
+  rc |= inv_imu_edmp_enable(&icm_driver);
+  
+  /* Let dmp see ODR ready on ISR1, ISR0 all off */
+  rc |= inv_imu_edmp_unmask_int_src(&icm_driver, INV_IMU_EDMP_INT1, EDMP_INT_SRC_EXT_ODR_DRDY_MASK);
+
+  rc |= setup_irq(intpin, handler);
+  
+  return rc;  
+}
+
+int ICM456xx::getAdvDataFromFifo(int32_t *accel, int32_t *gyro, float *external)
+{
+  int rc = 0;
+  uint16_t fifo_count;
+  const fifo_header_t *    header;
+  const fifo_header2_t *   header2;
+
+  rc |= inv_imu_adv_get_data_from_fifo(&icm_driver, fifo_data, &fifo_count);
+
+  /* patch for es0 vld setting fail */
+  header  = (const fifo_header_t *)&fifo_data[0];
+  if(header->bits.ext_header)
+  {
+    header2 = (const fifo_header2_t *)&fifo_data[1];    
+    if (header2->bits.es0_en)
+      fifo_data[1] |= (1 << 2);
+  }
+
+  rc |= inv_imu_adv_parse_fifo_data(&icm_driver, fifo_data, fifo_count);
+
+  memcpy(accel, accel_data, sizeof(accel_data));
+  memcpy(gyro, gyro_data, sizeof(gyro_data));
+  memcpy(external, mag_data, sizeof(mag_data));
+
+  return rc;
+}
+
+int ICM456xx::initMag(void)
+{
+  int ret =0;
+  ret = invn_read_whoami(&icm_driver);
+  return ret;
+}
+
+int ICM456xx::enableMag(int flag)
+{
+  int ret =0;
+  ret = invn_mag_enable(flag);
+  return ret;
+}
+
+int ICM456xx::getExternalMagData(float *mag)
+{
+  int rc;
+  uint8_t data[6];
+  int16_t external_data[3];
+  
+  float mag_scale = 1.f / (2 << 16);
+  
+  /* read register from ICT1531 */
+  inv_imu_i2c_master_cfg_t cfg = { .op_cnt   = 1,
+                                   .i2c_addr = MAG_I2C_ADDR,
+                                   .op 	  = { /* op[0] */
+                                            {
+                                               .r_n_w	   = 1,
+                                               .reg_addr = ICT1531X_MAG_DATA_X_LSB,
+                                               .len      = 6
+                                 } } };
+  
+  rc |= inv_imu_configure_i2cm(&icm_driver, &cfg, NULL);
+  rc |= inv_imu_start_i2cm_ops(&icm_driver, 1 /* fast_mode */);
+  rc |= wait_for_i2c_master_complete(&icm_driver);
+  rc |= inv_imu_get_i2cm_data(&icm_driver, data, 6);
+
+  external_data[0] = (((int16_t)data[1]) << 8) + data[0];
+  external_data[1] = (((int16_t)data[3]) << 8) + data[2];
+  external_data[2] = (((int16_t)data[5]) << 8) + data[4];
+
+  mag_data[0] = (external_data[0] * 4915) * mag_scale;
+  mag_data[1] = (external_data[1] * 4915) * mag_scale;
+  mag_data[2] = (external_data[2] * 4915) * mag_scale;
+  memcpy(mag, mag_data, sizeof(mag_data));
+
+  return rc;
+}
+
+#endif /* #if defined(ICM45605) || defined(ICM45686) */
+#endif /* defined(ICM45605) || defined(ICM45686) || defined(ICM45608) || defined(ICM45688P) || defined(ICM45689) */
 
 /* FIFO sensor event callback */
 static void sensor_event_cb(inv_imu_sensor_event_t *event)
@@ -519,7 +785,7 @@ static void sensor_event_cb(inv_imu_sensor_event_t *event)
   {
     accel_data[0] = event->accel[0];
     accel_data[1] = event->accel[1];
-    accel_data[2] = event->accel[2];	  
+    accel_data[2] = event->accel[2];
   }
 	
   if(event->sensor_mask & (1 << INV_SENSOR_GYRO))
@@ -529,18 +795,35 @@ static void sensor_event_cb(inv_imu_sensor_event_t *event)
     gyro_data[2] = event->gyro[2];  
   }
 
-#if defined(ICM45686S) || defined(ICM45605S)
-  if (event->sensor_mask & (1 << INV_SENSOR_ES0)) {
+#if defined(ICM45605S) || defined(ICM45686S)
+  if(event->sensor_mask & (1 << INV_SENSOR_ES0))
+  {
     gaf_status = inv_imu_edmp_gaf_build_outputs(icm_driver_ptr, (const uint8_t *)event->es0, &gaf_outputs_internal);
   }
+#elif defined(ICM45605) || defined(ICM45686)  
+  if(event->sensor_mask & (1 << INV_SENSOR_ES0))
+  {
+    float mag_scale = 1.f / (2 << 16);
+    const int mag_sens_q16 = 4915; // 0.075 uT/LSB
+    int16_t external_data[3];
+	
+    external_data[0] = (((int16_t)event->es0[1]) << 8) + event->es0[0];
+    external_data[1] = (((int16_t)event->es0[3]) << 8) + event->es0[2];
+    external_data[2] = (((int16_t)event->es0[5]) << 8) + event->es0[4];
+
+    mag_data[0] = (external_data[0] * mag_sens_q16) * mag_scale;
+    mag_data[1] = (external_data[1] * mag_sens_q16) * mag_scale;
+    mag_data[2] = (external_data[2] * mag_sens_q16) * mag_scale;
+  }
+
 #elif defined(ICM45608) || defined(ICM45689) 
-  if (event->sensor_mask & ((1 << INV_SENSOR_ES0) | (1 << INV_SENSOR_ES1)) == ((1 << INV_SENSOR_ES0) | (1 << INV_SENSOR_ES1))) {
+  if (event->sensor_mask & ((1 << INV_SENSOR_ES0) | (1 << INV_SENSOR_ES1)) == ((1 << INV_SENSOR_ES0) | (1 << INV_SENSOR_ES1)))
+  {
     memset(&gaf_outputs_internal, 0, sizeof(gaf_outputs_internal));
     inv_imu_edmp_gaf_decode_fifo(icm_driver_ptr, (const uint8_t *)event->es0,
                                  (const uint8_t *)event->es1, &gaf_outputs_internal);
 	gaf_status = gaf_outputs_internal.frame_complete;
   }
-
 #endif
 }
 
@@ -1029,7 +1312,7 @@ static int i2c_read(uint8_t reg, uint8_t * rbuffer, uint32_t rlen) {
     uint16_t rx_bytes = 0;
     if(offset != 0)
       i2c->beginTransmission(i2c_address);
-    uint16_t length = ((rlen - offset) > ARDUINO_I2C_BUFFER_LENGTH) ? ARDUINO_I2C_BUFFER_LENGTH : (rlen - offset) ;
+    uint8_t length = ((rlen - offset) > ARDUINO_I2C_BUFFER_LENGTH) ? ARDUINO_I2C_BUFFER_LENGTH : (rlen - offset) ;
     rx_bytes = i2c->requestFrom(i2c_address, length);
     if (rx_bytes == length) {
       for(uint8_t i = 0; i < length; i++) {
@@ -1163,4 +1446,5 @@ static void sleep_us(uint32_t us)
 {
     delayMicroseconds(us);
 }
+
 

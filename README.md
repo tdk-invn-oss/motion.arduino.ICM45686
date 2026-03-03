@@ -388,7 +388,36 @@ IMU.startTiltDetection();
 IMU.setApexInterrupt(2, irq_handler);
 ```
 
+**int setI2CMPassThrough(void)**
+
+This method set the AUX1 in I2CM bypass mode when the host is not in SPI. (Host can in I3C/I2C)
+
+**int getDataFromPassThrough(uint8_t reg, uint8_t& data)**
+
+When the I2CM is in pass-through mode, the host on AP interface can access external sensor directly.
+
+**int setI2CM_FIFO(uint8_t intpin, ICM456xx_irq_handler handler)**
+
+This method set the AUX1 in I2CM mode and read external data(compass) in FIFO ES0 frame. (Host can in I3C/I2C/SPI)
+
+**int getAdvDataFromFifo(int32_t *accel, int32_t *gyro, float *external)**
+
+This method read accel/gyro/external sensor data from FIFO frame
+
 # Available Sketches
+
+**AUX_I2C_FIFO**
+
+This sketch initializes the ICM456xx with the SPI interface, and running the AUX1 to I2CM mode. Host get the raw external sensor(compass) data via I2CM and send it to IMU FIFO.
+It loads extended features eDMP RAM image, handling ICT1531 data.
+eDMP is configured to run at 25Hz to :
+- get data through I2C master from ICT1531
+- requests ICT to perform a single acquisition 
+And host starts logging raw sensor data from IMU FIFO. Sensor data can be monitored on Serial monitor or Serial plotter
+
+**AUX_PassThrough**
+
+This sketch initializes the ICM456xx with the I2C interface, and running the AUX1 to I2CM Pass-Through mode. Register value from external sensor can be monitored on Serial monitor
 
 **Polling_I2C**
 

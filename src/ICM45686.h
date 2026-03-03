@@ -29,6 +29,7 @@ extern "C" {
 #if defined(ICM45686S) || defined(ICM45605S)
 #include "imu/inv_imu_edmp_gaf.h"
 #endif
+
 }
 
 // algo 0, enable GRV when enable 6-axis(AG)
@@ -75,6 +76,20 @@ class ICM456xx {
     int getGaf_GMRVData(float& quatW,float& quatX,float& quatY,float& quatZ);    
     int getGaf_RVData(float& quatW,float& quatX,float& quatY,float& quatZ);
     int getGaf_RMData(float& mX,float& mY, float& mZ);
+#endif
+#if defined(ICM45605) || defined(ICM45686) || defined(ICM45608) || defined(ICM45688P) || defined(ICM45689)
+    int adv_getDataFromFifo(void);
+    int setI2CM(void);
+    int setI2CMPassThrough(void);
+    int getDataFromI2CM(uint8_t reg, uint8_t& data);
+    int getDataFromPassThrough(uint8_t reg, uint8_t& data);
+#endif
+#if defined(ICM45605) || defined(ICM45686) || defined(ICM45688P)
+    int setI2CM_FIFO(uint8_t intpin, ICM456xx_irq_handler handler);
+    int getAdvDataFromFifo(int32_t *accel, int32_t *gyro, float *external);
+    int getExternalMagData(float *mag);
+    int initMag(void);
+    int enableMag(int flag);
 #endif
     int stopAccel(void);
     int stopGyro(void);
