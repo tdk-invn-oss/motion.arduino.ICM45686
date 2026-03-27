@@ -57,6 +57,7 @@ void setup() {
   IMU.startLowG();
 
   IMU.setApexInterrupt(2,irq_handler);
+  IMU.startAPEX();
 }
 
 void loop() {
@@ -69,7 +70,7 @@ void loop() {
     char* activity;
     uint32_t step_count=0;
     float step_cadence=0;
-    int raise_to_wake = 0;
+    int ret = 0;
 
     if(IMU.getTilt() == 1)
     {
@@ -88,17 +89,12 @@ void loop() {
       Serial.print(activity);
     }
 
-    raise_to_wake = IMU.getRaiseToWake();
-
-    if(raise_to_wake == 1)
-    {
+    ret = IMU.getRaiseToWake();
+    if(ret == 1)
       Serial.print(" R2W Wake-up");
-    } 
-    else if (raise_to_wake == 2)
-    {
+    else if (ret == 2)
       Serial.print(" R2W Sleep");
-    }
-    
+
     uint32_t duration_ms;  
     if(IMU.getFreefall(duration_ms) == 1)
     {

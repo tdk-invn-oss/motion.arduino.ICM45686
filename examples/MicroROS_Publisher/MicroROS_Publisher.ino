@@ -84,7 +84,7 @@ void setup() {
   set_microros_transports();
   delay(2000);
 
-  // Initializing the ICM42670P
+  // Initializing the IMU
   RCCHECK(IMU.begin());
 
   // Enable interrupt on pin 2, Fifo watermark=1

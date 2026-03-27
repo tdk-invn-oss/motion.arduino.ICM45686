@@ -17,7 +17,7 @@
 
 #include "invn_mag.h"
 
-#if defined(ICM45608) || defined(ICM45689)
+#if defined(ICM45689) || defined(ICM45608)
 #include "imu/inv_imu_edmp_mrm.h"
 #endif
 
@@ -220,7 +220,7 @@ int invn_mag_init(inv_imu_device_t *s)
 	return rc;
 }
 
-#if defined(ICM45608) || defined(ICM45689)
+#if defined(ICM45689) || defined(ICM45608)
 int invn_mag_load_ram_image(inv_imu_device_t *s, invn_mag_usecase_t usecase)
 {
 	int rc = 0;
@@ -259,9 +259,9 @@ int invn_mag_disable_automrm(inv_imu_device_t *s)
 
 	return rc;
 }
-#endif /* defined(ICM45608) || defined(ICM45689) */
+#endif /* INV_TYPE_C1 */
 
 uint64_t inv_ict1531x_get_time_us(void)
 {
-	return inv_imu_get_time_us();
+	return (uint64_t)micros();
 }

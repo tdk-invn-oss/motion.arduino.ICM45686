@@ -28,6 +28,7 @@ extern "C" {
 #include "imu/inv_imu_driver.h"
 #include "imu/inv_imu_i2cm.h"
 
+
 /** @brief System usecase definition for Magnetometer initialization */
 typedef enum { INVN_MAG_USECASE_IMG_OVER_SIF } invn_mag_usecase_t;
 
