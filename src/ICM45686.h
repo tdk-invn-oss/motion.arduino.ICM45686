@@ -42,6 +42,8 @@ extern "C" {
   #define INV_DEVICE_TYPE INV_TYPE_B1
 #elif defined(ICM45689) || defined(ICM45608)
   #define INV_DEVICE_TYPE INV_TYPE_C1
+#else
+  #error "No ICM device macro defined. Add a build flag for your device (e.g. -DICM45686)."
 #endif
 
 #if (INV_DEVICE_TYPE == INV_TYPE_A2)
