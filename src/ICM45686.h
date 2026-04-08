@@ -87,8 +87,12 @@ class ICM456xx {
   public:
     ICM456xx(TwoWire &i2c,bool address_lsb, uint32_t freq);
     ICM456xx(TwoWire &i2c,bool address_lsb);
+    ICM456xx(TwoWire &i2c,bool address_lsb, int sda, int scl);
+    ICM456xx(TwoWire &i2c,bool address_lsb, uint32_t freq, int sda, int scl);
     ICM456xx(SPIClass &spi,uint8_t chip_select_id, uint32_t freq);
     ICM456xx(SPIClass &spi,uint8_t chip_select_id);
+    ICM456xx(SPIClass &spi,uint8_t chip_select_id, int sck, int miso, int mosi);
+    ICM456xx(SPIClass &spi,uint8_t chip_select_id, uint32_t freq, int sck, int miso, int mosi);
     int begin();
     int startAccel(uint16_t odr, uint16_t fsr);
     int startGyro(uint16_t odr, uint16_t fsr);
@@ -178,6 +182,11 @@ class ICM456xx {
     accel_config0_accel_ui_fs_sel_t accel_fsr_g_to_param(uint16_t accel_fsr_g);
     gyro_config0_gyro_ui_fs_sel_t gyro_fsr_dps_to_param(uint16_t gyro_fsr_dps);
     int setup_irq(uint8_t intpin, ICM456xx_irq_handler handler);
+    int i2c_sda_pin;
+    int i2c_scl_pin;
+    int spi_sck_pin;
+    int spi_miso_pin;
+    int spi_mosi_pin;
     uint32_t step_cnt_ovflw;
     bool apex_enable[ICM456XX_APEX_MAX];
     dmp_ext_sen_odr_cfg_apex_odr_t apex_edmp_odr;
