@@ -24,6 +24,9 @@
 /* Magnetometer drivers */
 #include "Ict1531x/Ict1531x.h"
 
+/* Platform hook: forward declaration of Arduino's microsecond timer */
+extern unsigned long micros(void);
+
 /*
  * Static functions definition
  */
