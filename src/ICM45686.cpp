@@ -17,9 +17,7 @@
  
 #include "Arduino.h"
 #include "ICM45686.h"
-#if (INV_DEVICE_TYPE == INV_TYPE_A2)
-#include "imu/inv_imu_edmp_gaf.h"
-#else
+#if (INV_DEVICE_TYPE != INV_TYPE_A2)
 #include "invn_mag.h"
 #include "Ict1531x/Ict1531x.h"
 /* 
