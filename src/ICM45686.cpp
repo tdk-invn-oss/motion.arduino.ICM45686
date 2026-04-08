@@ -78,7 +78,8 @@ float mag_data[3];
  * WOM threshold value in mg.
  * 1g/256 resolution (wom_th = mg * 256 / 1000)
  */
-#define DEFAULT_WOM_THS_MG 52 >> 2 // 52 mg
+#define DEFAULT_WOM_THS_MG     (52 >> 2) // 52 mg
+#define DEFAULT_WOM_AID_THS_MG (24 >> 2) // 24 mg
 
 #define Q11_DIV (1<<11)
 #define Q14_DIV (1<<14)
@@ -1080,9 +1081,6 @@ int ICM456xx::setApexInterrupt(uint8_t intpin, ICM456xx_irq_handler handler)
 
   return rc;
 }
-
-#define DEFAULT_WOM_THS_MG     52 >> 2 // 52 mg
-#define DEFAULT_WOM_AID_THS_MG 24 >> 2 // 24 mg
 
 int ICM456xx::startAPEX(dmp_ext_sen_odr_cfg_apex_odr_t edmp_odr, accel_config0_accel_odr_t accel_odr)
 {
