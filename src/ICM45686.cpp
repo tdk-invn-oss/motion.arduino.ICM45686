@@ -1185,7 +1185,7 @@ int ICM456xx::startAPEX(dmp_ext_sen_odr_cfg_apex_odr_t edmp_odr, accel_config0_a
 {
   int rc = 0;
 
-  if(edmp_odr == NULL && accel_odr == NULL)
+  if(edmp_odr == 0 && accel_odr == 0)
   {
     if(apex_enable[ICM456XX_APEX_FF] || apex_enable[ICM456XX_APEX_LOWG] || apex_enable[ICM456XX_APEX_HIGHG])
     {
