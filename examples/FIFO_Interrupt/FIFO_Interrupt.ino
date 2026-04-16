@@ -15,7 +15,11 @@
  *
  */
  
-#include "ICM45686.h"
+#include "ICM45686S.h"
+
+#define ACCEL_FSR_G    16				/* The accel FSR is 16g */
+#define GYRO_FSR_DPS   2000			/* The gyro FSR is 2000 dps */
+#define MAX_LSB        32768
 
 // Instantiate an ICM456XX with LSB address set to 0
 ICM456xx IMU(Wire,0);
@@ -40,11 +44,9 @@ void setup() {
   }
   // Enable interrupt on pin 2, Fifo watermark=10
   IMU.enableFifoInterrupt(2,irq_handler,10);
-  // Accel ODR = 100 Hz and Full Scale Range = 16G
-  IMU.startAccel(100,16);
-  // Gyro ODR = 100 Hz and Full Scale Range = 2000 dps
-  IMU.startGyro(100,2000);
-
+  
+  IMU.startAccel(100,ACCEL_FSR_G);
+  IMU.startGyro(100,GYRO_FSR_DPS);
 }
 
 void loop() {
@@ -54,28 +56,44 @@ void loop() {
     for(int i = 0; i < 10 ; i ++)
     {
       inv_imu_fifo_data_t imu_data;
+      float accel_g[3] = { 0 };
+      float gyro_dps[3] = { 0 };
+      float temp_degc;
+
       IMU.getDataFromFifo(imu_data);
       // Format data for Serial Plotter
+
+      accel_g[0]  = (float)(imu_data.byte_16.accel_data[0] * ACCEL_FSR_G) / MAX_LSB;
+      accel_g[1]  = (float)(imu_data.byte_16.accel_data[1] * ACCEL_FSR_G) / MAX_LSB;
+      accel_g[2]  = (float)(imu_data.byte_16.accel_data[2] * ACCEL_FSR_G) / MAX_LSB;
+
       Serial.print("AccelX:");
-      Serial.print(imu_data.byte_16.accel_data[0]);
+      Serial.print(accel_g[0]);
       Serial.print(",");
       Serial.print("AccelY:");
-      Serial.print(imu_data.byte_16.accel_data[1]);
+      Serial.print(accel_g[1]);
       Serial.print(",");
       Serial.print("AccelZ:");
-      Serial.print(imu_data.byte_16.accel_data[2]);
+      Serial.print(accel_g[2]);
       Serial.print(",");
+
+      gyro_dps[0]  = (float)(imu_data.byte_16.gyro_data[0] * GYRO_FSR_DPS) / MAX_LSB;
+      gyro_dps[1]  = (float)(imu_data.byte_16.gyro_data[1] * GYRO_FSR_DPS) / MAX_LSB;
+      gyro_dps[2]  = (float)(imu_data.byte_16.gyro_data[2] * GYRO_FSR_DPS) / MAX_LSB;
+
       Serial.print("GyroX:");
-      Serial.print(imu_data.byte_16.gyro_data[0]);
+      Serial.print(gyro_dps[0]);
       Serial.print(",");
       Serial.print("GyroY:");
-      Serial.print(imu_data.byte_16.gyro_data[1]);
+      Serial.print(gyro_dps[1]);
       Serial.print(",");
       Serial.print("GyroZ:");
-      Serial.print(imu_data.byte_16.gyro_data[2]);
+      Serial.print(gyro_dps[2]);
       Serial.print(",");
+
+      temp_degc = 25 + ((float)imu_data.byte_16.temp_data/2);
       Serial.print("Temperature:");
-      Serial.println(imu_data.byte_16.temp_data);
+      Serial.println(temp_degc);
     }
   }
 }

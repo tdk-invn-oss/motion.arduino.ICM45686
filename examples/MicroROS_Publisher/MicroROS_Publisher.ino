@@ -20,13 +20,13 @@
   
   This example aims to use MicroROS Arduino environment.
   Arduino library: micro_ros_arduino
-  It publishes IMU accelerometer and gyroscope data from ICM456xx
+  It publishes IMU orientation, accelerometer and gyroscope data from ICM456xx
   to microROS Agent.
   
-  To get the data at 100Hz, please modify the serial interface speed in 
+  To get the data at 100Hz, please modify the serial interface speed in
   micro_ros_arduino library: src\default_transport.cpp
   
-  Update the baudrate parameter in `c Serial.begin()` API. 
+  Update the baudrate parameter in `c Serial.begin()` API.
   For example to 1Mbaud/s.
   ```c
     bool arduino_transport_open(struct uxrCustomTransport * transport)
@@ -38,7 +38,7 @@
 */
 #include <micro_ros_arduino.h>
 
-#include "ICM45686.h"
+#include "ICM45686S.h"
 
 #include <rcl/rcl.h>
 #include <rcl/error_handling.h>
@@ -87,12 +87,8 @@ void setup() {
   // Initializing the IMU
   RCCHECK(IMU.begin());
 
-  // Enable interrupt on pin 2, Fifo watermark=1
-  IMU.enableFifoInterrupt(2,irq_handler,1);
-  // Accel ODR = 100 Hz and Full Scale Range = 16G
-  IMU.startAccel(100,16);
-  // Gyro ODR = 100 Hz and Full Scale Range = 2000 dps
-  IMU.startGyro(100,2000);
+  // Start GAF algo with interrupt on pin 2
+  IMU.startGaf(2,irq_handler,0);
 
   allocator = rcl_get_default_allocator();
   // create init_options
@@ -117,23 +113,33 @@ void loop() {
   if(irq_received) {
     irq_received = 0;
 
-    inv_imu_fifo_data_t imu_data;
+    int rc;
+    float W,X,Y,Z;
+    inv_imu_sensor_data_t imu_data;
     struct timespec tv = {0};
     static uint32_t count = 0;
 
-    // Read accel and gyro data from FIFO
+    // Read GAF orientation from FIFO
+    rc = IMU.getGaf_GRVData(W,X,Y,Z);
+
+    // Read accel and gyro data from registers
     clock_gettime(0, &tv);
-    IMU.getDataFromFifo(imu_data);
+    IMU.getDataFromRegisters(imu_data);
 
     imu_msg.header.stamp.nanosec = tv.tv_nsec;
     imu_msg.header.stamp.sec = tv.tv_sec;
 
-    imu_msg.linear_acceleration.x = convert_accel(imu_data.byte_16.accel_data[0], ACCEL_FS);
-    imu_msg.linear_acceleration.y = convert_accel(imu_data.byte_16.accel_data[1], ACCEL_FS);
-    imu_msg.linear_acceleration.z = convert_accel(imu_data.byte_16.accel_data[2], ACCEL_FS);
-    imu_msg.angular_velocity.x = convert_gyro(imu_data.byte_16.gyro_data[0], GYRO_FS);
-    imu_msg.angular_velocity.y = convert_gyro(imu_data.byte_16.gyro_data[1], GYRO_FS);
-    imu_msg.angular_velocity.z = convert_gyro(imu_data.byte_16.gyro_data[2], GYRO_FS);
+    imu_msg.orientation.w = W;
+    imu_msg.orientation.x = X;
+    imu_msg.orientation.y = Y;
+    imu_msg.orientation.z = Z;
+
+    imu_msg.linear_acceleration.x = convert_accel(imu_data.accel_data[0], ACCEL_FS);
+    imu_msg.linear_acceleration.y = convert_accel(imu_data.accel_data[1], ACCEL_FS);
+    imu_msg.linear_acceleration.z = convert_accel(imu_data.accel_data[2], ACCEL_FS);
+    imu_msg.angular_velocity.x = convert_gyro(imu_data.gyro_data[0], GYRO_FS);
+    imu_msg.angular_velocity.y = convert_gyro(imu_data.gyro_data[1], GYRO_FS);
+    imu_msg.angular_velocity.z = convert_gyro(imu_data.gyro_data[2], GYRO_FS);
 
     rcl_publish(&publisher, &imu_msg, NULL); 
   }

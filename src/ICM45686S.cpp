@@ -16,10 +16,9 @@
  */
  
 #include "Arduino.h"
-#include "ICM45686.h"
-#if (INV_DEVICE_TYPE == INV_TYPE_A2)
-#include "imu/inv_imu_edmp_gaf.h"
-#else
+#include "ICM45686S.h"
+
+#if (INV_DEVICE_TYPE != INV_TYPE_A2)
 #include "invn_mag.h"
 #include "Ict1531x/Ict1531x.h"
 /* 
@@ -31,7 +30,6 @@ static int32_t soft_iron_matrix[3][3] = {
 	{ 0, (1 << 30), 0 },
 	{ 0, 0, (1 << 30) },
 };
-
 #endif
 
 #if (INV_DEVICE_TYPE == INV_TYPE_A1)
@@ -78,19 +76,28 @@ float mag_data[3];
  * WOM threshold value in mg.
  * 1g/256 resolution (wom_th = mg * 256 / 1000)
  */
-#define DEFAULT_WOM_THS_MG 52 >> 2 // 52 mg
+#define DEFAULT_WOM_THS_MG     (52 >> 2) // 52 mg
+#define DEFAULT_WOM_AID_THS_MG (24 >> 2) // 24 mg
+
 
 #define Q11_DIV (1<<11)
 #define Q14_DIV (1<<14)
 #define Q16_DIV (1<<16)
 #define Q30_DIV (1<<30)
 
-#define RAW_MAG_SCALE 0.075f
+#define ACCEL_FSR_G        (4)
+#define RAW_ACC_SCALE      (ACCEL_FSR_G /* gee */ * 2 /* / 32768 * (1<<16)) */)
+#define GYRO_FSR_DPS       (2000)
+#define RAW_GYR_SCALE      (GYRO_FSR_DPS /* dps */ * 2 /* / (1<<15) * (1<<16)) */)
+#define RAW_MAG_SCALE      0.075
+#define RAW_MAG_SCALE_Q16  4915  /* 0.075 * (1 << 16) */
+
 
 #if (INV_DEVICE_TYPE == INV_TYPE_A2) || (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
 // GAF output aggregartion
 static inv_imu_edmp_gaf_outputs_t gaf_outputs_internal = {0};
 static int gaf_status = 0;
+static int32_t acc_bias_q16[3] = { 0, 0, 0 }; //customer bias
 #endif
 
 // This is used by the getDataFromFifo callback (not object aware), declared static
@@ -329,6 +336,9 @@ int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t alg
 
 #if (INV_DEVICE_TYPE == INV_TYPE_A2)
   fifo_config.base_conf.fifo_depth = FIFO_CONFIG0_FIFO_DEPTH_GAF;
+  fifo_config.base_conf.fifo_wm_th = 1;
+  fifo_config.es1_en			   = INV_IMU_ENABLE;
+  fifo_config.es0_en			   = INV_IMU_ENABLE;
 
   /* Load APEX algorithm GAF in DMP RAM */
   rc |= inv_imu_edmp_gaf_init(&icm_driver);
@@ -451,7 +461,7 @@ int ICM456xx::getGaf_GRVData(float& quatW, float& quatX, float& quatY, float& qu
     rc = 0;
 #endif
 
-#if (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
+#if (INV_DEVICE_TYPE == INV_TYPE_A2) || (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
   if(rc == 0) {
     quatW = (float)gaf_outputs.grv_quat_q14[0] / (float)Q14_DIV;
     quatX = (float)gaf_outputs.grv_quat_q14[1] / (float)Q14_DIV;
@@ -539,15 +549,6 @@ int ICM456xx::getGaf_RMData(float& mX, float& mY, float& mZ)
 
 int ICM456xx::getGaf_BiasData(int type, int& q12_X,int& q12_Y,int& q12_Z,int& accuracy)
 {
-#if (INV_DEVICE_TYPE == INV_TYPE_A2)
-  if(type != GYRO)
-	return -1;
-
-  q12_X = gaf_outputs_internal.gyr_bias_q16[0] >> 4;
-  q12_Y = gaf_outputs_internal.gyr_bias_q16[1] >> 4;
-  q12_Z = gaf_outputs_internal.gyr_bias_q16[2] >> 4;
-  accuracy = gaf_outputs_internal.gyr_accuracy_flag;
-#else
   switch(type)
   {
     case GYRO:
@@ -567,7 +568,7 @@ int ICM456xx::getGaf_BiasData(int type, int& q12_X,int& q12_Y,int& q12_Z,int& ac
     default:
       return -1;
   }
-#endif
+
   return 0;
 }
 
@@ -976,9 +977,23 @@ static void sensor_event_cb(inv_imu_sensor_event_t *event)
   }
 
 #if (INV_DEVICE_TYPE == INV_TYPE_A2)
-  if(event->sensor_mask & (1 << INV_SENSOR_ES0))
-  {
-    gaf_status = inv_imu_edmp_gaf_build_outputs(icm_driver_ptr, (const uint8_t *)event->es0, &gaf_outputs_internal);
+  if ((event->sensor_mask & (1 << INV_SENSOR_ES0)) &&
+	  (event->sensor_mask & (1 << INV_SENSOR_ES1))) {
+    inv_imu_sensor_data_t data;
+    inv_imu_get_register_data(icm_driver_ptr, &data);
+
+    accel_data[0] = data.accel_data[0];
+    accel_data[1] = data.accel_data[1];
+    accel_data[2] = data.accel_data[2];
+
+    gyro_data[0] = data.gyro_data[0];
+    gyro_data[1] = data.gyro_data[1];
+    gyro_data[2] = data.gyro_data[2];
+	
+    gaf_status = inv_imu_edmp_gaf_build_outputs(icm_driver_ptr, (const uint8_t *)event->es0, 
+                                               (const uint8_t *)event->es1, &gaf_outputs_internal);
+    if(!gaf_status)
+      gaf_status = 1;
   }
 #elif (INV_DEVICE_TYPE == INV_TYPE_A1)
   if(event->sensor_mask & (1 << INV_SENSOR_ES0))
@@ -1007,6 +1022,91 @@ static void sensor_event_cb(inv_imu_sensor_event_t *event)
   }
 #endif
 }
+
+#if (INV_DEVICE_TYPE == INV_TYPE_A2) || (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
+
+static void fixedpoint_to_float(const int32_t *in, float *out, const uint8_t fxp_shift,
+                                const uint8_t dim)
+{
+	int   i;
+	float scale = 1.f / (1 << fxp_shift);
+
+	for (i = 0; i < dim; i++)
+		out[i] = scale * in[i];
+}
+
+
+int ICM456xx::getCalibratedMag(float& mX, float& mY, float& mZ)
+{
+  int32_t raw_q16[3];
+  float mag_ut[3];
+#if (INV_DEVICE_TYPE == INV_TYPE_C1)
+  if(gaf_outputs_internal.rmag_valid)
+  {
+    raw_q16[0] = (int32_t)gaf_outputs_internal.rmag[0] * RAW_MAG_SCALE_Q16;
+    raw_q16[1] = (int32_t)gaf_outputs_internal.rmag[1] * RAW_MAG_SCALE_Q16;
+    raw_q16[2] = (int32_t)gaf_outputs_internal.rmag[2] * RAW_MAG_SCALE_Q16;
+  }
+  
+  if(gaf_outputs_internal.mag_bias_valid)
+  {
+    raw_q16[0] -= gaf_outputs_internal.mag_bias_q16[0];
+    raw_q16[1] -= gaf_outputs_internal.mag_bias_q16[1];
+    raw_q16[2] -= gaf_outputs_internal.mag_bias_q16[2];
+  }
+
+  fixedpoint_to_float(raw_q16, mag_ut, 16, 3);
+  mX = mag_ut[0];
+  mY = mag_ut[1];
+  mZ = mag_ut[2];
+#endif
+  return 0;
+}
+
+int ICM456xx::getCalibratedAccel(float& aX, float& aY, float& aZ)
+{
+  int32_t raw_q16[3];
+  float accel_ut[3];
+
+  raw_q16[0] = (int32_t)accel_data[0] * RAW_ACC_SCALE - acc_bias_q16[0];
+  raw_q16[1] = (int32_t)accel_data[1] * RAW_ACC_SCALE - acc_bias_q16[1];
+  raw_q16[2] = (int32_t)accel_data[2] * RAW_ACC_SCALE - acc_bias_q16[2];
+
+  fixedpoint_to_float(raw_q16, accel_ut, 16, 3);
+  aX = accel_ut[0];
+  aY = accel_ut[1];
+  aZ = accel_ut[2];
+	
+  return 0;
+}
+
+int ICM456xx::getCalibratedGyro(float& gX, float& gY, float& gZ)
+{
+  int32_t raw_q16[3];
+  float gyro_ut[3];
+
+  raw_q16[0] = (int32_t)gyro_data[0] * RAW_GYR_SCALE;
+  raw_q16[1] = (int32_t)gyro_data[1] * RAW_GYR_SCALE;
+  raw_q16[2] = (int32_t)gyro_data[2] * RAW_GYR_SCALE;
+
+#if (INV_DEVICE_TYPE == INV_TYPE_C1)
+  if(gaf_outputs_internal.gyr_bias_valid)
+#endif
+  {
+    raw_q16[0] -= (int32_t)gaf_outputs_internal.gyr_bias_q12[0] << 4;
+    raw_q16[1] -= (int32_t)gaf_outputs_internal.gyr_bias_q12[1] << 4;
+    raw_q16[2] -= (int32_t)gaf_outputs_internal.gyr_bias_q12[2] << 4;
+  }
+
+  fixedpoint_to_float(raw_q16, gyro_ut, 16, 3);
+  gX = gyro_ut[0];
+  gY = gyro_ut[1];
+  gZ = gyro_ut[2];
+  
+  return 0;
+}
+
+#endif
 
 int ICM456xx::setApexInterrupt(uint8_t intpin, ICM456xx_irq_handler handler)
 {
@@ -1080,9 +1180,6 @@ int ICM456xx::setApexInterrupt(uint8_t intpin, ICM456xx_irq_handler handler)
 
   return rc;
 }
-
-#define DEFAULT_WOM_THS_MG     52 >> 2 // 52 mg
-#define DEFAULT_WOM_AID_THS_MG 24 >> 2 // 24 mg
 
 int ICM456xx::startAPEX(dmp_ext_sen_odr_cfg_apex_odr_t edmp_odr, accel_config0_accel_odr_t accel_odr)
 {
@@ -1439,7 +1536,7 @@ int ICM456xx::startLowG(uint8_t intpin, ICM456xx_irq_handler handler)
   return rc;
 }
 
-int ICM456xx::startWakeOnMotion(uint8_t intpin, ICM456xx_irq_handler handler)
+int ICM456xx::startWakeOnMotion(uint8_t intpin, ICM456xx_irq_handler handler, int odr)
 {
   int rc = 0;
   inv_imu_int_state_t config_int;
@@ -1453,19 +1550,18 @@ int ICM456xx::startWakeOnMotion(uint8_t intpin, ICM456xx_irq_handler handler)
   config_int.INV_EDMP_EVENT = INV_IMU_DISABLE;
   inv_imu_set_config_int(&icm_driver,INV_IMU_INT1, &config_int);
 
-  /* Disabled All APEX features */
-  for(int i=0; i < ICM456XX_APEX_MAX; i++)
-  {
-    apex_enable[i] = false;
-  }
-  
-  rc |= startAPEX(DMP_EXT_SEN_ODR_CFG_APEX_ODR_50_HZ,ACCEL_CONFIG0_ACCEL_ODR_50_HZ);
+  /* Select WUOSC clock to have accel in ULP (lowest power mode) */
+  rc |= inv_imu_select_accel_lp_clk(&icm_driver, SMC_CONTROL_0_ACCEL_LP_CLK_WUOSC);
+
+  /* Set AVG to 1x */
+  rc |= inv_imu_set_accel_lp_avg(&icm_driver, IPREG_SYS2_REG_129_ACCEL_LP_AVG_1);
+
   rc |= inv_imu_adv_configure_wom(&icm_driver, DEFAULT_WOM_THS_MG, DEFAULT_WOM_THS_MG,
           DEFAULT_WOM_THS_MG, TMST_WOM_CONFIG_WOM_INT_MODE_ANDED,
           TMST_WOM_CONFIG_WOM_INT_DUR_1_SMPL);
   rc |= inv_imu_adv_enable_wom(&icm_driver);
-  rc |= inv_imu_edmp_enable(&icm_driver);
-  rc |= inv_imu_adv_enable_accel_ln(&icm_driver);
+  rc |= inv_imu_set_accel_frequency(&icm_driver, (accel_config0_accel_odr_t)odr);
+  rc |= inv_imu_adv_enable_accel_lp(&icm_driver);
 
   return rc;
 }

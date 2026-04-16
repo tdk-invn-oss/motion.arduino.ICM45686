@@ -1,7 +1,7 @@
 ![TDKInvensense](doc/pictures/TDKInvensense.jpg)
 
 # ICM456xx Arduino library
-This arduino library for the [TDK/Invensense ICM456xx High Performance 6-Axis MotionTracking<sup>(TM)</sup> IMU](https://invensense.tdk.com/products/motion-tracking/6-axis/icm-456xy/).
+This arduino library for the [TDK/Invensense ICM456xx High Performance 6-Axis MotionTracking<sup>(TM)</sup> IMU](https://invensense.tdk.com/en-us/products/6-axis/icm-456xy/).
 The ICM-456xx is a high performance 6-axis MEMS MotionTracking device. It has a configurable host interface that supports I3C<sup>SM</sup>, I2C and SPI serial communication, and an I2C master mode interface for connection to external sensors. The device features up to 8Kbytes FIFO and 2 programmable interrupts.
 This library supports both I2C and SPI commmunication with the ICM456xx.
 
@@ -191,6 +191,63 @@ Raw data can be translated to International System using the configured FSR for 
       Serial.println(imu_data.byte_16.temp_data);
 ```
 
+**int startGaf(uint8_t intpin, ICM456xx_irq_handler handler);**
+
+This method initializes the eDMP with GAF algorithm and set the interrupt of the ICM456xx. The interrupt is triggered each time a Quaternion computation is available in the fifo and the provided handler is called.
+Any interuptable pin of the Arduino can be used for intpin.
+It return 0 on success.
+
+```C++
+uint8_t irq_received = 0;
+
+void irq_handler(void)
+{
+  irq_received = 1;
+}
+...
+
+// Enable GAF interrupt on pin 2
+IMU.startGaf(2,irq_handler);
+```
+
+**int getGafData(float& quatW,float& quatX,float& quatY,float& quatZ)**
+
+This method reads the GAF algorithm Quaternions stored in the FIFO.
+It return 0 on success.
+
+```C++
+      float W, X, Y, Z;
+      IMU.getGafData(W, X, Y, Z);
+      // Format data for Serial Plotter
+      Serial.print("QuatW:");
+      Serial.println(W);
+      Serial.print("QuatX:");
+      Serial.println(X);
+      Serial.print("QuatY:");
+      Serial.println(Y);
+      Serial.print("QuatZ:");
+      Serial.println(Z);
+```
+
+**int getGafData(inv_imu_edmp_gaf_outputs_t& gaf_outputs)**
+
+This method reads the GAF algorithm Quaternions stored in the FIFO, using inv_imu_gaf_outputs_t structure allows to return more information on GAF algorithm internal state.
+It return 0 on success.
+
+```C++
+      inv_imu_gaf_outputs_t gaf_data;
+      IMU.getGafData(gaf_data);
+      // Format data for Serial Plotter
+      Serial.print("QuatW:");
+      Serial.println(gaf_data.grv_quat_q30[0]);
+      Serial.print("QuatX:");
+      Serial.println(gaf_data.grv_quat_q30[1]);
+      Serial.print("QuatY:");
+      Serial.println(gaf_data.grv_quat_q30[2]);
+      Serial.print("QuatZ:");
+      Serial.println(gaf_data.grv_quat_q30[3]);
+```
+
 **inv_imu_sensor_data_t**
 
 This structure is used by the ICM456xx driver to return raw sensor data. Available data is:
@@ -219,6 +276,16 @@ This structure is used by the ICM456xx driver to return FIFO raw sensor data. Av
 | byte_20.gyro_data[3]  | 3-axis gyro raw data (20 bits)           |
 | byte_20.temp_data     | Temperature raw data (2 bytes)           |
 | byte_20.timestamp     | Timestamp in us (2 bytes)                |
+
+**inv_imu_edmp_gaf_outputs_t**
+
+This structure is used by the ICM456xx driver to return GAF algorithm data. Available data is:
+|Field name|description|
+| --- | --- |
+| grv_quat_q30[4]   | Computed Quaternions (fixed point q30)      |
+| gyr_bias_q16[3]   | 3-axis gyro computed bias (fixed point q16) |
+| gyr_accuracy_flag | Gyro calibration confidence level (0 to 3)  |
+| stationary_flag   | Set to true when no motion is detected      |
 
 ## APEX functions
 
@@ -388,36 +455,7 @@ IMU.startTiltDetection();
 IMU.setApexInterrupt(2, irq_handler);
 ```
 
-**int setI2CMPassThrough(void)**
-
-This method set the AUX1 in I2CM bypass mode when the host is not in SPI. (Host can in I3C/I2C)
-
-**int getDataFromPassThrough(uint8_t reg, uint8_t& data)**
-
-When the I2CM is in pass-through mode, the host on AP interface can access external sensor directly.
-
-**int setI2CM_FIFO(uint8_t intpin, ICM456xx_irq_handler handler)**
-
-This method set the AUX1 in I2CM mode and read external data(compass) in FIFO ES0 frame. (Host can in I3C/I2C/SPI)
-
-**int getAdvDataFromFifo(int32_t *accel, int32_t *gyro, float *external)**
-
-This method read accel/gyro/external sensor data from FIFO frame
-
 # Available Sketches
-
-**AUX_I2C_FIFO**
-
-This sketch initializes the ICM456xx with the SPI interface, and running the AUX1 to I2CM mode. Host get the raw external sensor(compass) data via I2CM and send it to IMU FIFO.
-It loads extended features eDMP RAM image, handling ICT1531 data.
-eDMP is configured to run at 25Hz to :
-- get data through I2C master from ICT1531
-- requests ICT to perform a single acquisition 
-And host starts logging raw sensor data from IMU FIFO. Sensor data can be monitored on Serial monitor or Serial plotter
-
-**AUX_PassThrough**
-
-This sketch initializes the ICM456xx with the I2C interface, and running the AUX1 to I2CM Pass-Through mode. Register value from external sensor can be monitored on Serial monitor
 
 **Polling_I2C**
 
@@ -430,6 +468,11 @@ This sketch initializes the ICM456xx with the SPI interface, and starts logging 
 **FIFO_Interrupt**
 
 This sketch initializes the ICM456xx with the I2C interface and interrupt PIN2, and starts logging raw sensor data from IMU FIFO. Sensor data can be monitored on Serial monitor or Serial plotter
+
+**GAF_orientation**
+
+This sketch initializes the ICM456xx with the I2C interface, interrupt on PIN2, and GAF algorithm. GAF algorithm uses Gyrometer and Accelerometer data to compute the board orientation.
+This sketch logs GAF computed orientation as Quaternions. Quaternions can be monitored on Serial monitor or Serial plotter
 
 **APEX_Tilt**
 
@@ -457,13 +500,17 @@ This sketch initializes the ICM456xx with the I2C interface and interrupt PIN2, 
 
 **MicroROS_Publisher**
 
-This sketch initializes the ICM456xx with the I2C interface and interrupt PIN2, initializes also microROS Arduino environment and starts logging Gyrometer and Accelerometer data from IMU FIFO. Sensor data are published in IMU structure. For more information, refer to MicroROS_README.md.
+This sketch initializes the ICM456xx with the I2C interface and interrupt PIN2, initializes also microROS Arduino environment and starts logging Gyrometer and Accelerometer data from IMU registers and computed orientation as Quaternions from IMU FIFO. Sensor data are published in IMU structure. For more information, refer to MicroROS_README.md.
 
 # IMU data monitoring
 
 When the ICM456xx IMU is logging, the Accelerometer, Gyroscope and Temperature raw data can be monitored with the Arduino Serial Plotter (Tools->Serial Plotter).
 
 ![Serial Plotter](doc/pictures/SerialPlotter.jpg)
+
+When the ICM456xx IMU is running the GAF algorithm, the Quaternions data can be monitored with the Arduino Serial Plotter (Tools->Serial Plotter).
+
+![Serial Plotter](doc/pictures/SerialPlotterQuat.jpg)
 
 # Using a different device interface
 
