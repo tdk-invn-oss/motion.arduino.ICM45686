@@ -1,7 +1,7 @@
 ![TDKInvensense](doc/pictures/TDKInvensense.jpg)
 
 # ICM456xx Arduino library
-This arduino library for the [TDK/Invensense ICM456xx High Performance 6-Axis MotionTracking<sup>(TM)</sup> IMU](https://invensense.tdk.com/products/motion-tracking/6-axis/icm-456xy/).
+This arduino library for the [TDK/Invensense ICM456xx High Performance 6-Axis MotionTracking<sup>(TM)</sup> IMU](https://invensense.tdk.com/en-us/products/6-axis/icm-456xy/).
 The ICM-456xx is a high performance 6-axis MEMS MotionTracking device. It has a configurable host interface that supports I3C<sup>SM</sup>, I2C and SPI serial communication, and an I2C master mode interface for connection to external sensors. The device features up to 8Kbytes FIFO and 2 programmable interrupts.
 This library supports both I2C and SPI commmunication with the ICM456xx.
 

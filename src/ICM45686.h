@@ -42,6 +42,8 @@ extern "C" {
   #define INV_DEVICE_TYPE INV_TYPE_B1
 #elif defined(ICM45689) || defined(ICM45608)
   #define INV_DEVICE_TYPE INV_TYPE_C1
+#else
+  #error "No ICM device macro defined. Please include an inv_imu.h."
 #endif
 
 #if (INV_DEVICE_TYPE == INV_TYPE_A2)
@@ -109,6 +111,9 @@ class ICM456xx {
     int getGaf_RVData(float& quatW,float& quatX,float& quatY,float& quatZ,float& accuracy);
     int getGaf_RMData(float& mX,float& mY, float& mZ);
     int getGaf_BiasData(int type, int& q12_X,int& q12_Y,int& q12_Z,int& accuracy);
+    int getCalibratedMag(float& mX, float& mY, float& mZ);
+    int getCalibratedAccel(float& aX, float& aY, float& aZ);
+    int getCalibratedGyro(float& gX, float& gY, float& gZ);
 #endif
 
 #if (INV_DEVICE_TYPE == INV_TYPE_B1)
@@ -143,7 +148,7 @@ class ICM456xx {
     int startHighG(uint8_t intpin=2, ICM456xx_irq_handler handler=NULL);
     int startLowG(uint8_t intpin=2, ICM456xx_irq_handler handler=NULL);
     int getPedometer(uint32_t& step_count, float& step_cadence, char*& activity);
-    int startWakeOnMotion(uint8_t intpin, ICM456xx_irq_handler handler);
+    int startWakeOnMotion(uint8_t intpin, ICM456xx_irq_handler handler, int odr=ACCEL_CONFIG0_ACCEL_ODR_50_HZ);
     int startTap(uint8_t intpin=2, ICM456xx_irq_handler handler=NULL);
     int startRaiseToWake(uint8_t intpin=2, ICM456xx_irq_handler handler=NULL);
     int startB2S(uint8_t intpin=2, ICM456xx_irq_handler handler=NULL);

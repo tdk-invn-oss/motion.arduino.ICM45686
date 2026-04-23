@@ -15,6 +15,7 @@
  *
  */
 
+#include "Arduino.h"
 #include "invn_mag.h"
 
 #if defined(ICM45689) || defined(ICM45608)
