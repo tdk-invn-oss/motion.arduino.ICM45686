@@ -109,6 +109,8 @@ ICM456xx::ICM456xx(TwoWire &i2c_ref,bool lsb, uint32_t freq) {
   } else {
     clk_freq = I2C_DEFAULT_CLOCK;
   }
+  i2c_sda_pin = -1;
+  i2c_scl_pin = -1;
 }
 
 // ICM456xx constructor for I2c interface, default frequency
@@ -116,6 +118,31 @@ ICM456xx::ICM456xx(TwoWire &i2c_ref,bool lsb) {
   i2c = &i2c_ref; 
   i2c_address = ICM456xx_I2C_ADDRESS | (lsb ? 0x1 : 0);
   clk_freq = I2C_DEFAULT_CLOCK;
+  i2c_sda_pin = -1;
+  i2c_scl_pin = -1;
+}
+
+// ICM456xx constructor for I2c interface with custom pins
+ICM456xx::ICM456xx(TwoWire &i2c_ref, bool lsb, int sda, int scl) {
+  i2c = &i2c_ref;
+  i2c_address = ICM456xx_I2C_ADDRESS | (lsb ? 0x1 : 0);
+  clk_freq = I2C_DEFAULT_CLOCK;
+  i2c_sda_pin = sda;
+  i2c_scl_pin = scl;
+}
+
+// ICM456xx constructor for I2c interface with custom frequency and pins
+ICM456xx::ICM456xx(TwoWire &i2c_ref, bool lsb, uint32_t freq, int sda, int scl) {
+  i2c = &i2c_ref;
+  i2c_address = ICM456xx_I2C_ADDRESS | (lsb ? 0x1 : 0);
+  if ((freq <= I2C_MAX_CLOCK) && (freq >= 100000))
+  {
+    clk_freq = freq;
+  } else {
+    clk_freq = I2C_DEFAULT_CLOCK;
+  }
+  i2c_sda_pin = sda;
+  i2c_scl_pin = scl;
 }
 
 // ICM456xx constructor for spi interface
@@ -128,6 +155,9 @@ ICM456xx::ICM456xx(SPIClass &spi_ref,uint8_t cs_id, uint32_t freq) {
   } else {
     clk_freq = SPI_DEFAULT_CLOCK;
   }
+  spi_sck_pin  = -1;
+  spi_miso_pin = -1;
+  spi_mosi_pin = -1;
 }
 
 // ICM456xx constructor for spi interface, default frequency
@@ -135,6 +165,34 @@ ICM456xx::ICM456xx(SPIClass &spi_ref,uint8_t cs_id) {
   spi = &spi_ref;
   chip_select_id = cs_id; 
   clk_freq = SPI_DEFAULT_CLOCK;
+  spi_sck_pin  = -1;
+  spi_miso_pin = -1;
+  spi_mosi_pin = -1;
+}
+
+// ICM456xx constructor for spi interface with custom pins
+ICM456xx::ICM456xx(SPIClass &spi_ref, uint8_t cs_id, int sck, int miso, int mosi) {
+  spi = &spi_ref;
+  chip_select_id = cs_id;
+  clk_freq = SPI_DEFAULT_CLOCK;
+  spi_sck_pin  = sck;
+  spi_miso_pin = miso;
+  spi_mosi_pin = mosi;
+}
+
+// ICM456xx constructor for spi interface with custom frequency and pins
+ICM456xx::ICM456xx(SPIClass &spi_ref, uint8_t cs_id, uint32_t freq, int sck, int miso, int mosi) {
+  spi = &spi_ref;
+  chip_select_id = cs_id;
+  if ((freq <= SPI_MAX_CLOCK) && (freq >= 100000))
+  {
+    clk_freq = freq;
+  } else {
+    clk_freq = SPI_DEFAULT_CLOCK;
+  }
+  spi_sck_pin  = sck;
+  spi_miso_pin = miso;
+  spi_mosi_pin = mosi;
 }
 
 /* starts communication with the ICM456xx */
@@ -143,13 +201,19 @@ int ICM456xx::begin() {
   uint8_t who_am_i;
 
   if (i2c != NULL) {
-    i2c->begin();
+    if (i2c_sda_pin >= 0 && i2c_scl_pin >= 0)
+      i2c->begin(i2c_sda_pin, i2c_scl_pin);
+    else
+      i2c->begin();
     i2c->setClock(clk_freq);
     icm_driver.transport.serif_type = UI_I2C;
     icm_driver.transport.read_reg  = i2c_read;
     icm_driver.transport.write_reg = i2c_write;
   } else {
-    spi->begin();
+    if (spi_sck_pin >= 0 && spi_miso_pin >= 0 && spi_mosi_pin >= 0)
+      spi->begin(spi_sck_pin, spi_miso_pin, spi_mosi_pin, chip_select_id);
+    else
+      spi->begin();
     pinMode(chip_select_id,OUTPUT);
     digitalWrite(chip_select_id,HIGH);
     icm_driver.transport.serif_type = UI_SPI4;
