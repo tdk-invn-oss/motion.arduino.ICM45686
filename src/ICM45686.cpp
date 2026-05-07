@@ -54,7 +54,14 @@ static void sensor_event_cb(inv_imu_sensor_event_t *event);
 #define I2C_DEFAULT_CLOCK 400000
 #define I2C_MAX_CLOCK 1000000
 #define ICM456xx_I2C_ADDRESS 0x68
-#define ARDUINO_I2C_BUFFER_LENGTH 32
+// Use the platform-provided Wire buffer size where available, falling back to 32 (AVR default)
+#if defined(I2C_BUFFER_LENGTH)
+  #define ARDUINO_I2C_BUFFER_LENGTH I2C_BUFFER_LENGTH   // ESP32, RP2040, etc.
+#elif defined(BUFFER_LENGTH)
+  #define ARDUINO_I2C_BUFFER_LENGTH BUFFER_LENGTH        // AVR Arduino
+#else
+  #define ARDUINO_I2C_BUFFER_LENGTH 32                   // safe fallback
+#endif
 // spi
 #define SPI_READ 0x80
 #define SPI_DEFAULT_CLOCK 6000000
