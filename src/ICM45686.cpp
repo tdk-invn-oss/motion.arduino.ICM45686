@@ -41,25 +41,21 @@ static int32_t soft_iron_matrix[3][3] = {
 #include "imu/inv_imu_edmp_extended_features.h"
 #endif
 
-static int i2c_write(uint8_t reg, const uint8_t * wbuffer, uint32_t wlen);
-static int i2c_read(uint8_t reg, uint8_t * rbuffer, uint32_t rlen);
-static int spi_write(uint8_t reg, const uint8_t * wbuffer, uint32_t wlen);
-static int spi_read(uint8_t reg, uint8_t * rbuffer, uint32_t rlen);
+static int i2c_write(void *context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen);
+static int i2c_read(void *context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen);
+static int spi_write(void *context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen);
+static int spi_read(void *context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen);
 static void sleep_us(uint32_t us);
 static void sensor_event_cb(inv_imu_sensor_event_t *event);
 
 // i2c and SPI interfaces are used from C driver callbacks, without any knowledge of the object
 // As they are declared as static, they will be overriden each time a new ICM456xx object is created
 // i2c
-uint8_t i2c_address = 0;
-static TwoWire *i2c = NULL;
 #define I2C_DEFAULT_CLOCK 400000
 #define I2C_MAX_CLOCK 1000000
 #define ICM456xx_I2C_ADDRESS 0x68
 #define ARDUINO_I2C_BUFFER_LENGTH 32
 // spi
-static SPIClass *spi = NULL;
-static uint8_t chip_select_id = 0;
 #define SPI_READ 0x80
 #define SPI_DEFAULT_CLOCK 6000000
 #define SPI_MAX_CLOCK 24000000
@@ -160,6 +156,8 @@ int ICM456xx::begin() {
     icm_driver.transport.read_reg  = spi_read;
     icm_driver.transport.write_reg = spi_write;
   }
+
+  icm_driver.transport.context	= (void *)this;
   icm_driver.transport.sleep_us = sleep_us;
   
   /* Disable APEX features */
@@ -1790,30 +1788,35 @@ int ICM456xx::updateApex(void)
 }
 
 
-static int i2c_write(uint8_t reg, const uint8_t * wbuffer, uint32_t wlen) {
-  i2c->beginTransmission(i2c_address);
-  i2c->write(reg);
+static int i2c_write(void *context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen)
+{
+  ICM456xx *instance = (ICM456xx *)context;
+
+  instance->i2c->beginTransmission(instance->i2c_address);
+  instance->i2c->write(reg);
   for(uint8_t i = 0; i < wlen; i++) {
-    i2c->write(wbuffer[i]);
+    instance->i2c->write(wbuffer[i]);
   }
-  i2c->endTransmission();
+  instance->i2c->endTransmission();
   return 0;
 }
 
-static int i2c_read(uint8_t reg, uint8_t * rbuffer, uint32_t rlen) {
+static int i2c_read(void *context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen)
+{
   uint16_t offset = 0;
+  ICM456xx *instance = (ICM456xx *)context;
 
-  i2c->beginTransmission(i2c_address);
-  i2c->write(reg);
-  i2c->endTransmission(false);
+  instance->i2c->beginTransmission(instance->i2c_address);
+  instance->i2c->write(reg);
+  instance->i2c->endTransmission(false);
   while(offset < rlen)
   {
     uint16_t rx_bytes = 0;
     uint8_t length = ((rlen - offset) > ARDUINO_I2C_BUFFER_LENGTH) ? ARDUINO_I2C_BUFFER_LENGTH : (rlen - offset) ;
-    rx_bytes = i2c->requestFrom(i2c_address, length);
+    rx_bytes = instance->i2c->requestFrom(instance->i2c_address, length);
     if (rx_bytes == length) {
       for(uint8_t i = 0; i < length; i++) {
-        rbuffer[offset+i] = i2c->read();
+        rbuffer[offset+i] = instance->i2c->read();
       }
       offset += length;
     }
@@ -1827,25 +1830,31 @@ static int i2c_read(uint8_t reg, uint8_t * rbuffer, uint32_t rlen) {
   }
 }
 
-static int spi_write(uint8_t reg, const uint8_t * wbuffer, uint32_t wlen) {
-  spi->beginTransaction(SPISettings(clk_freq, MSBFIRST, SPI_MODE3));
-  digitalWrite(chip_select_id,LOW);
-  spi->transfer(reg);
+static int spi_write(void *context, uint8_t reg, const uint8_t * wbuffer, uint32_t wlen)
+{
+  ICM456xx *instance = (ICM456xx *)context;
+
+  instance->spi->beginTransaction(SPISettings(clk_freq, MSBFIRST, SPI_MODE3));
+  digitalWrite(instance->chip_select_id,LOW);
+  instance->spi->transfer(reg);
   for(uint8_t i = 0; i < wlen; i++) {
-    spi->transfer(wbuffer[i]);
+    instance->spi->transfer(wbuffer[i]);
   }
-  digitalWrite(chip_select_id,HIGH);
-  spi->endTransaction();
+  digitalWrite(instance->chip_select_id,HIGH);
+  instance->spi->endTransaction();
   return 0;
 }
 
-static int spi_read(uint8_t reg, uint8_t * rbuffer, uint32_t rlen) {
-  spi->beginTransaction(SPISettings(clk_freq, MSBFIRST, SPI_MODE3));
-  digitalWrite(chip_select_id,LOW);
-  spi->transfer(reg | SPI_READ);
-  spi->transfer(rbuffer,rlen);
-  digitalWrite(chip_select_id,HIGH);
-  spi->endTransaction();
+static int spi_read(void *context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen)
+{
+  ICM456xx *instance = (ICM456xx *)context;
+
+  instance->spi->beginTransaction(SPISettings(clk_freq, MSBFIRST, SPI_MODE3));
+  digitalWrite(instance->chip_select_id,LOW);
+  instance->spi->transfer(reg | SPI_READ);
+  instance->spi->transfer(rbuffer,rlen);
+  digitalWrite(instance->chip_select_id,HIGH);
+  instance->spi->endTransaction();
   return 0;
 }
 

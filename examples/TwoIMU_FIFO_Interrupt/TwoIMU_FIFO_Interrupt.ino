@@ -1,0 +1,135 @@
+/*
+ *
+ * Copyright (c) [2026] by InvenSense, Inc.
+ * 
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *
+ */
+ 
+#include "ICM45686.h"
+
+#define ACCEL_FSR_G    16			/* The accel FSR is 16g */
+#define GYRO_FSR_DPS   2000			/* The gyro FSR is 2000 dps */
+#define MAX_LSB        32768
+
+// Instantiate an ICM456XX with LSB address set to 0
+ICM456xx IMU1(Wire,0);
+ICM456xx IMU2(Wire,1);
+
+volatile uint8_t irq1_received = 0;
+volatile uint8_t irq2_received = 0;
+
+void irq1_handler(void) {
+  irq1_received = 1;
+}
+
+void irq2_handler(void) {
+  irq2_received = 1;
+}
+
+void setup() {
+  int ret;
+  Serial.begin(115200);
+  while(!Serial) {}
+
+  // Initializing the ICM456XX
+  ret = IMU1.begin();
+  if (ret != 0) {
+    Serial.print("ICM456xx initialization failed in sensor1: ");
+    Serial.println(ret);
+    while(1);
+  }
+
+  ret = IMU2.begin();
+  if (ret != 0) {
+    Serial.print("ICM456xx initialization failed in sensor2: ");
+    Serial.println(ret);
+    while(1);
+  }
+
+  // Enable interrupt on pin 2 for IMU1, Fifo watermark=10
+  IMU1.enableFifoInterrupt(2,irq1_handler,10);
+
+  // Enable interrupt on pin 3 for IMU2, Fifo watermark=10
+  IMU2.enableFifoInterrupt(3,irq2_handler,10);
+
+  IMU1.startAccel(100,ACCEL_FSR_G);
+  IMU1.startGyro(100,GYRO_FSR_DPS);
+
+  IMU2.startAccel(100,ACCEL_FSR_G);
+  IMU2.startGyro(100,GYRO_FSR_DPS);
+}
+
+void show_data(int imu, inv_imu_fifo_data_t imu_data)
+{
+  float accel_g[3] = { 0 };
+  float gyro_dps[3] = { 0 };
+  float temp_degc;
+      
+  // Format data for Serial Plotter
+  accel_g[0]  = (float)(imu_data.byte_16.accel_data[0] * ACCEL_FSR_G) / MAX_LSB;
+  accel_g[1]  = (float)(imu_data.byte_16.accel_data[1] * ACCEL_FSR_G) / MAX_LSB;
+  accel_g[2]  = (float)(imu_data.byte_16.accel_data[2] * ACCEL_FSR_G) / MAX_LSB;
+
+  Serial.print("IMU");
+  Serial.print(imu);
+  Serial.print(" ");
+  Serial.print("AccelX:");
+  Serial.print(accel_g[0]);
+  Serial.print(",");
+  Serial.print("AccelY:");
+  Serial.print(accel_g[1]);
+  Serial.print(",");
+  Serial.print("AccelZ:");
+  Serial.print(accel_g[2]);
+  Serial.print(",");
+
+  gyro_dps[0]  = (float)(imu_data.byte_16.gyro_data[0] * GYRO_FSR_DPS) / MAX_LSB;
+  gyro_dps[1]  = (float)(imu_data.byte_16.gyro_data[1] * GYRO_FSR_DPS) / MAX_LSB;
+  gyro_dps[2]  = (float)(imu_data.byte_16.gyro_data[2] * GYRO_FSR_DPS) / MAX_LSB;
+
+  Serial.print("GyroX:");
+  Serial.print(gyro_dps[0]);
+  Serial.print(",");
+  Serial.print("GyroY:");
+  Serial.print(gyro_dps[1]);
+  Serial.print(",");
+  Serial.print("GyroZ:");
+  Serial.print(gyro_dps[2]);
+  Serial.print(",");
+
+  temp_degc = 25 + ((float)imu_data.byte_16.temp_data/2);
+  Serial.print("Temperature:");
+  Serial.println(temp_degc);
+}
+
+void loop() {
+  if(irq1_received) {
+    irq1_received = 0;
+    for(int i = 0; i < 10; i++) {
+      inv_imu_fifo_data_t imu_data;
+      if(IMU1.getDataFromFifo(imu_data) == 0) {
+        show_data(1, imu_data);
+      }
+    }
+  }
+
+  if(irq2_received) {
+    irq2_received = 0;
+    for(int i = 0; i < 10; i++) {
+      inv_imu_fifo_data_t imu_data;
+      if(IMU2.getDataFromFifo(imu_data) == 0) {
+        show_data(2, imu_data);
+      }
+    }
+  }
+}

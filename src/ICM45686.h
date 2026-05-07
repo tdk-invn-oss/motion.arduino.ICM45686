@@ -170,6 +170,10 @@ class ICM456xx {
                       accel_config0_accel_odr_t accel_odr=(accel_config0_accel_odr_t)NULL);
 
     inv_imu_edmp_int_state_t apex_status;
+  	TwoWire *i2c;
+	uint8_t i2c_address;
+	SPIClass *spi;
+	uint8_t chip_select_id;
 
   protected:
     inv_imu_device_t icm_driver;
