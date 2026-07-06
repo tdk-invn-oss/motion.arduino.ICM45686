@@ -433,35 +433,35 @@ This sketch initializes the ICM456xx with the SPI interface, and starts logging 
 
 **FIFO_Interrupt**
 
-This sketch initializes the ICM456xx with the I2C interface and interrupt PIN2, and starts logging raw sensor data from IMU FIFO. Sensor data can be monitored on Serial monitor or Serial plotter
+This sketch initializes the ICM456xx with the I2C interface and interrupt pin D2, and starts logging raw sensor data from IMU FIFO. Sensor data can be monitored on Serial monitor or Serial plotter
 
 **APEX_Tilt**
 
-This sketch initializes the ICM456xx with the I2C interface and interrupt PIN2, and starts the APEX Tilt detection. A TILT message is displayed on the Serial monitor when the sensor is tilted for 5 seconds.
+This sketch initializes the ICM456xx with the I2C interface and interrupt pin D2, and starts the APEX Tilt detection. A TILT message is displayed on the Serial monitor when the sensor is tilted for 5 seconds.
 
 **APEX_Pedometer**
 
-This sketch initializes the ICM456xx with the I2C interface and interrupt PIN2, and starts the APEX Pedometer. A Pedometer status is displayed on the Serial monitor (for each step after the 5th step).
+This sketch initializes the ICM456xx with the I2C interface and interrupt pin D2, and starts the APEX Pedometer. A Pedometer status is displayed on the Serial monitor (for each step after the 5th step).
 
 **APEX_WakeOnMotion**
 
-This sketch initializes the ICM456xx with the I2C interface and interrupt PIN2, and starts the APEX Wake on Motion. A Wake-up message is displayed on the Serial monitor when the sensor detects movement.
+This sketch initializes the ICM456xx with the I2C interface and interrupt pin D2, and starts the APEX Wake on Motion. A Wake-up message is displayed on the Serial monitor when the sensor detects movement.
 
 **APEX_Tap**
 
-This sketch initializes the ICM456xx with the I2C interface and interrupt PIN2, and starts the APEX Tap. A Tap report is displayed on the Serial monitor each time a tap is detected.
+This sketch initializes the ICM456xx with the I2C interface and interrupt pin D2, and starts the APEX Tap. A Tap report is displayed on the Serial monitor each time a tap is detected.
 
 **APEX_RaiseToWake**
 
-This sketch initializes the ICM456xx with the I2C interface and interrupt PIN2, and starts the APEX Raise to Wake algorithm. Print "Wake" or "Sleep" message on the Serial monitor when a Raise to Wake event is detected.
+This sketch initializes the ICM456xx with the I2C interface and interrupt pin D2, and starts the APEX Raise to Wake algorithm. Print "Wake" or "Sleep" message on the Serial monitor when a Raise to Wake event is detected.
 
 **APEX_Events**
 
-This sketch initializes the ICM456xx with the I2C interface and interrupt PIN2, and starts the APEX Pedometer, Tilt, Tap and Raise to wake. APEX status is displayed on the Serial monitor.
+This sketch initializes the ICM456xx with the I2C interface and interrupt pin D2, and starts the APEX Pedometer, Tilt, Tap and Raise to wake. APEX status is displayed on the Serial monitor.
 
 **MicroROS_Publisher**
 
-This sketch initializes the ICM456xx with the I2C interface and interrupt PIN2, initializes also microROS Arduino environment and starts logging Gyrometer and Accelerometer data from IMU FIFO. Sensor data are published in IMU structure. For more information, refer to MicroROS_README.md.
+This sketch initializes the ICM456xx with the I2C interface and interrupt pin D2, initializes also microROS Arduino environment and starts logging Gyrometer and Accelerometer data from IMU FIFO. Sensor data are published in IMU structure. For more information, refer to MicroROS_README.md.
 
 # IMU data monitoring
 

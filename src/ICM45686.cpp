@@ -270,11 +270,12 @@ int ICM456xx::getDataFromFifo(inv_imu_fifo_data_t& data) {
 }
 
 #if (INV_DEVICE_TYPE == INV_TYPE_A2) || (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
-int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t algo)
+int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint16_t gaf_odr, uint16_t afsr, uint16_t gfsr, uint8_t algo)
 {
   int rc = 0;
   int gyro_is_on = 1;
-  int mag_is_on = 0;  
+  int mag_is_on = 0;
+  int sensor_odr;
   inv_imu_edmp_gaf_parameters_t gaf_params;
   inv_imu_edmp_int_state_t apex_int_config;
   //int8_t clk_variation = 0;
@@ -329,8 +330,40 @@ int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t alg
 #endif
 
   memset(&gaf_outputs_internal, 0, sizeof(gaf_outputs_internal));
-  
-  rc |= inv_imu_edmp_set_frequency(&icm_driver, DMP_EXT_SEN_ODR_CFG_APEX_ODR_100_HZ);
+
+  sensor_odr = gaf_odr;
+
+  if (mag_is_on)
+    sensor_odr = gaf_odr*2;
+
+  switch (sensor_odr)
+  {
+    case 50:
+      rc |= inv_imu_edmp_set_frequency(&icm_driver, DMP_EXT_SEN_ODR_CFG_APEX_ODR_50_HZ);
+      rc |= inv_imu_set_accel_frequency(&icm_driver, ACCEL_CONFIG0_ACCEL_ODR_50_HZ);
+      rc |= inv_imu_set_gyro_frequency(&icm_driver, GYRO_CONFIG0_GYRO_ODR_50_HZ);
+      break;
+    case 100:
+      rc |= inv_imu_edmp_set_frequency(&icm_driver, DMP_EXT_SEN_ODR_CFG_APEX_ODR_100_HZ);
+      rc |= inv_imu_set_accel_frequency(&icm_driver, ACCEL_CONFIG0_ACCEL_ODR_100_HZ);
+      rc |= inv_imu_set_gyro_frequency(&icm_driver, GYRO_CONFIG0_GYRO_ODR_100_HZ);
+      break;
+    case 200:
+      rc |= inv_imu_edmp_set_frequency(&icm_driver, DMP_EXT_SEN_ODR_CFG_APEX_ODR_200_HZ);
+      rc |= inv_imu_set_accel_frequency(&icm_driver, ACCEL_CONFIG0_ACCEL_ODR_200_HZ);
+      rc |= inv_imu_set_gyro_frequency(&icm_driver, GYRO_CONFIG0_GYRO_ODR_200_HZ);
+      break;
+    case 400:
+      rc |= inv_imu_edmp_set_frequency(&icm_driver, DMP_EXT_SEN_ODR_CFG_APEX_ODR_400_HZ);
+      rc |= inv_imu_set_accel_frequency(&icm_driver, ACCEL_CONFIG0_ACCEL_ODR_400_HZ);
+      rc |= inv_imu_set_gyro_frequency(&icm_driver, GYRO_CONFIG0_GYRO_ODR_400_HZ);
+      break;
+    default:
+      rc |= inv_imu_edmp_set_frequency(&icm_driver, DMP_EXT_SEN_ODR_CFG_APEX_ODR_50_HZ);
+      rc |= inv_imu_set_accel_frequency(&icm_driver, ACCEL_CONFIG0_ACCEL_ODR_50_HZ);
+      rc |= inv_imu_set_gyro_frequency(&icm_driver, GYRO_CONFIG0_GYRO_ODR_50_HZ);
+      break;
+  }
 
 #if (INV_DEVICE_TYPE == INV_TYPE_A2)
   fifo_config.base_conf.fifo_depth = FIFO_CONFIG0_FIFO_DEPTH_GAF;
@@ -345,7 +378,8 @@ int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t alg
   rc |= inv_imu_edmp_gaf_init_parameters(&icm_driver, &gaf_params);
 
   //gaf_params.clock_variation = clk_variation;
-  gaf_params.pdr_us          = 10000;
+  gaf_params.pdr_us          = 1000000 / gaf_odr;
+
   rc |= inv_imu_edmp_gaf_set_parameters(&icm_driver, &gaf_params);
 #else
   fifo_config.base_conf.gyro_en    = INV_IMU_ENABLE;
@@ -359,24 +393,20 @@ int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t alg
 
   rc |= inv_imu_edmp_init(&icm_driver);
   rc |= inv_imu_edmp_get_gaf_parameters(&icm_driver, &gaf_params);
+  gaf_params.pdr_us = 1000000 / gaf_odr;
+
 #if (INV_DEVICE_TYPE == INV_TYPE_C1)
-  gaf_params.pdr_us = 20000;
   gaf_params.run_spherical = true;
   if (mag_is_on)
-    gaf_params.mag_dt_us = 20000;
+    gaf_params.mag_dt_us = 1000000 / 50; // Fix 50Hz
   else
     gaf_params.mag_dt_us = 0;
-#else
-  gaf_params.pdr_us	= 10000;
 #endif
 
   int32_t acc_bias_q16[3]= {0,0,0};
   int16_t gyr_bias_q16[3]= {0,0,0};
   int32_t mag_bias_q16[3]= {0,0,0};
 
-  rc |= inv_imu_edmp_set_frequency(&icm_driver, DMP_EXT_SEN_ODR_CFG_APEX_ODR_100_HZ);
-  rc |= inv_imu_set_accel_frequency(&icm_driver, ACCEL_CONFIG0_ACCEL_ODR_100_HZ);
-  rc |= inv_imu_set_gyro_frequency(&icm_driver, GYRO_CONFIG0_GYRO_ODR_100_HZ);
   rc |= inv_imu_edmp_set_gaf_acc_bias(&icm_driver, acc_bias_q16);
   rc |= inv_imu_edmp_set_gaf_gyr_bias(&icm_driver, gyr_bias_q16, 0, 0);
   rc |= inv_imu_edmp_set_gaf_parameters(&icm_driver, &gaf_params);
@@ -407,9 +437,9 @@ int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t alg
   if (rc != 0) {
     return rc;
   }
-  rc |= startAccel(100,8);
+  rc |= startAccel(sensor_odr, afsr);
   if(gyro_is_on)
-    rc |= startGyro(100,2000);
+    rc |= startGyro(sensor_odr, gfsr);
   sleep_us(GYR_STARTUP_TIME_US);
   
   /* Only 2k FIFO is supported if GAF RAM image is loaded */

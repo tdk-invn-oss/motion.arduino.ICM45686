@@ -96,7 +96,7 @@ class ICM456xx {
     int enableFifoInterrupt(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t fifo_watermark);
     int getDataFromFifo(inv_imu_fifo_data_t& data);
 #if (INV_DEVICE_TYPE == INV_TYPE_A2) || (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
-    int startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t algo);
+    int startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint16_t gaf_odr, uint16_t afsr, uint16_t gfsr, uint8_t algo);
     int getGafData(inv_imu_edmp_gaf_outputs_t& gaf_outputs);
     int getGaf_GRVData(float& quatW,float& quatX,float& quatY,float& quatZ);
 	int getGaf_GMRVData(float& quatW, float& quatX, float& quatY, float& quatZ) {
