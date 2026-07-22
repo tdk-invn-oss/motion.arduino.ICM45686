@@ -95,7 +95,7 @@ class ICM456xx {
     int getDataFromRegisters(inv_imu_sensor_data_t& data);
     int enableFifoInterrupt(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t fifo_watermark);
     int getDataFromFifo(inv_imu_fifo_data_t& data);
-#if (INV_DEVICE_TYPE == INV_TYPE_A2) || (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
+#if (INV_DEVICE_TYPE != INV_TYPE_A1)
     int startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint16_t gaf_odr, uint16_t afsr, uint16_t gfsr, uint8_t algo);
     int getGafData(inv_imu_edmp_gaf_outputs_t& gaf_outputs);
     int getGaf_GRVData(float& quatW,float& quatX,float& quatY,float& quatZ);
@@ -126,12 +126,13 @@ class ICM456xx {
     void SetVocalVibDet_thresh(uint32_t thresh);
 #endif
 
-#if (INV_DEVICE_TYPE == INV_TYPE_A1) || (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
+#if (INV_DEVICE_TYPE != INV_TYPE_A2)
     int adv_getDataFromFifo(void);
     int setI2CM(void);
     int setI2CMPassThrough(void);
     int getDataFromI2CM(uint8_t reg, uint8_t& data);
     int getDataFromPassThrough(uint8_t reg, uint8_t& data);
+    void initializeSoftIron(const int32_t* src_unit_matrix);
 #endif
 #if (INV_DEVICE_TYPE == INV_TYPE_A1)
     int setI2CM_FIFO(uint8_t intpin, ICM456xx_irq_handler handler);
@@ -190,7 +191,13 @@ class ICM456xx {
     int32_t	nb_samples_before_decision=0; /* To compute delay before notifying VVD window's end */
     int32_t	vvd_thresh=0;
 #endif
-
+#if (INV_DEVICE_TYPE != INV_TYPE_A2)
+    int32_t soft_iron_matrix[3][3];
+#endif
+#if (INV_DEVICE_TYPE != INV_TYPE_A1)
+    int32_t acc_bias_q16[3]; //customer bias
+    int32_t mag_bias_q16[3];
+#endif
 };
 
 #endif // ICM456xx_H

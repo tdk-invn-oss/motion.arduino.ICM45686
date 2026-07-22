@@ -21,15 +21,6 @@
 #if (INV_DEVICE_TYPE != INV_TYPE_A2)
 #include "invn_mag.h"
 #include "Ict1531x/Ict1531x.h"
-/* 
- * Soft-iron matrix applied to mag data in EDMP
- * Align mag axis to IMU
- */
-static int32_t soft_iron_matrix[3][3] = {
-	{ (1 << 30), 0, 0 },
-	{ 0, (1 << 30), 0 },
-	{ 0, 0, (1 << 30) },
-};
 #endif
 
 #if (INV_DEVICE_TYPE == INV_TYPE_A1)
@@ -89,11 +80,10 @@ float mag_data[3];
 #define RAW_MAG_SCALE_Q16  4915  /* 0.075 * (1 << 16) */
 
 
-#if (INV_DEVICE_TYPE == INV_TYPE_A2) || (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
+#if (INV_DEVICE_TYPE != INV_TYPE_A1)
 // GAF output aggregartion
 static inv_imu_edmp_gaf_outputs_t gaf_outputs_internal = {0};
 static int gaf_status = 0;
-static int32_t acc_bias_q16[3] = { 0, 0, 0 }; //customer bias
 #endif
 
 // This is used by the getDataFromFifo callback (not object aware), declared static
@@ -139,8 +129,13 @@ ICM456xx::ICM456xx(SPIClass &spi_ref,uint8_t cs_id) {
 
 /* starts communication with the ICM456xx */
 int ICM456xx::begin() {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   uint8_t who_am_i;
+#if (INV_DEVICE_TYPE != INV_TYPE_A1)
+  acc_bias_q16[0] = 0;
+  acc_bias_q16[1] = 0;
+  acc_bias_q16[2] = 0;
+#endif
 
   if (i2c != NULL) {
     i2c->begin();
@@ -173,13 +168,20 @@ int ICM456xx::begin() {
   ((inv_imu_adv_var_t *)&icm_driver.adv_var)->sensor_event_cb = sensor_event_cb;
   icm_driver_ptr = &icm_driver;
 
+#if (INV_DEVICE_TYPE != INV_TYPE_A2)
+  int default_unit_matrix[9] = {(1 << 30), 0, 0,
+                                 0, (1 << 30), 0, 
+                                 0, 0, (1 << 30)};
+  memcpy(soft_iron_matrix, default_unit_matrix, sizeof(soft_iron_matrix));
+#endif
+
   sleep_us(3000);
 
   return inv_imu_adv_init(&icm_driver);
 }
 
 int ICM456xx::startAccel(uint16_t odr, uint16_t fsr) {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   rc |= inv_imu_set_accel_fsr(&icm_driver, accel_fsr_g_to_param(fsr));
   rc |= inv_imu_set_accel_frequency(&icm_driver, accel_freq_to_param(odr));
   rc |= inv_imu_set_accel_mode(&icm_driver, PWR_MGMT0_ACCEL_MODE_LN);
@@ -187,7 +189,7 @@ int ICM456xx::startAccel(uint16_t odr, uint16_t fsr) {
 }
 
 int ICM456xx::startGyro(uint16_t odr, uint16_t fsr) {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   rc |= inv_imu_set_gyro_fsr(&icm_driver, gyro_fsr_dps_to_param(fsr));
   rc |= inv_imu_set_gyro_frequency(&icm_driver, gyro_freq_to_param(odr));
   rc |= inv_imu_set_gyro_mode(&icm_driver, PWR_MGMT0_GYRO_MODE_LN);
@@ -208,7 +210,7 @@ int ICM456xx::getDataFromRegisters(inv_imu_sensor_data_t& data) {
 
 int ICM456xx::setup_irq(uint8_t intpin, ICM456xx_irq_handler handler)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   inv_imu_int_state_t it_conf;
   const inv_imu_int_pin_config_t it_pins = {
     .int_polarity=INTX_CONFIG2_INTX_POLARITY_HIGH,
@@ -244,7 +246,7 @@ static int inv_init_i2cm_bypass(inv_imu_device_t *s)
 }
 
 int ICM456xx::enableFifoInterrupt(uint8_t intpin, ICM456xx_irq_handler handler, uint8_t fifo_watermark) {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   inv_imu_int_state_t it_conf;
   const inv_imu_fifo_config_t fifo_config = {
     .gyro_en=true,
@@ -269,15 +271,17 @@ int ICM456xx::getDataFromFifo(inv_imu_fifo_data_t& data) {
   return inv_imu_get_fifo_frame(&icm_driver,&data);
 }
 
-#if (INV_DEVICE_TYPE == INV_TYPE_A2) || (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
+#if (INV_DEVICE_TYPE != INV_TYPE_A1)
 int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint16_t gaf_odr, uint16_t afsr, uint16_t gfsr, uint8_t algo)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   int gyro_is_on = 1;
   int mag_is_on = 0;
   int sensor_odr;
   inv_imu_edmp_gaf_parameters_t gaf_params;
   inv_imu_edmp_int_state_t apex_int_config;
+
+  gaf_outputs_internal = {0};
   //int8_t clk_variation = 0;
   inv_imu_adv_fifo_config_t fifo_config = {
     .base_conf = {
@@ -310,21 +314,21 @@ int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint16_t ga
   else if(algo == ALGO_GMRV) // enable GMRV when enable 6-axis(AM)
   {
     mag_is_on = 1;
-	gyro_is_on = 0;
+    gyro_is_on = 0;
   }
   else if(algo == ALGO_RV) // enable RV when enable 9-axis(AGM)
   {
     mag_is_on = 1;
-	gyro_is_on = 1;
+    gyro_is_on = 1;
   }
 
   if (mag_is_on) {
-  	rc = invn_mag_init(&icm_driver);
+      rc = invn_mag_init(&icm_driver);
 
     if (rc != 0)
-	{
+    {
       mag_is_on = 0;
-	  return rc;
+      return rc;
     }
   }
 #endif
@@ -368,8 +372,8 @@ int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint16_t ga
 #if (INV_DEVICE_TYPE == INV_TYPE_A2)
   fifo_config.base_conf.fifo_depth = FIFO_CONFIG0_FIFO_DEPTH_GAF;
   fifo_config.base_conf.fifo_wm_th = 1;
-  fifo_config.es1_en			   = INV_IMU_ENABLE;
-  fifo_config.es0_en			   = INV_IMU_ENABLE;
+  fifo_config.es1_en               = INV_IMU_ENABLE;
+  fifo_config.es0_en               = INV_IMU_ENABLE;
 
   /* Load APEX algorithm GAF in DMP RAM */
   rc |= inv_imu_edmp_gaf_init(&icm_driver);
@@ -386,9 +390,9 @@ int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint16_t ga
   fifo_config.base_conf.accel_en   = INV_IMU_ENABLE;
   fifo_config.base_conf.fifo_depth = FIFO_CONFIG0_FIFO_DEPTH_APEX;
   fifo_config.base_conf.fifo_wm_th = 1;
-  fifo_config.es1_en			   = INV_IMU_ENABLE;
+  fifo_config.es1_en               = INV_IMU_ENABLE;
   fifo_config.es0_en               = INV_IMU_ENABLE;
-  fifo_config.tmst_fsync_en 	   = INV_IMU_ENABLE;
+  fifo_config.tmst_fsync_en        = INV_IMU_ENABLE;
   fifo_config.es0_6b_9b            = FIFO_CONFIG4_FIFO_ES0_9B;
 
   rc |= inv_imu_edmp_init(&icm_driver);
@@ -416,15 +420,15 @@ int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint16_t ga
 
   if (mag_is_on)
   {
-	/* Configure properly soft iron matrix in eDMP image */
-	rc |= inv_imu_edmp_set_gaf_soft_iron_cor_matrix(&icm_driver, soft_iron_matrix);
-	rc |= inv_imu_edmp_enable_gaf_soft_iron_cor(&icm_driver);
+    /* Configure properly soft iron matrix in eDMP image */
+    rc |= inv_imu_edmp_set_gaf_soft_iron_cor_matrix(&icm_driver, soft_iron_matrix);
+    rc |= inv_imu_edmp_enable_gaf_soft_iron_cor(&icm_driver);
   }
 
   if(!gyro_is_on) // For GMRV
   {
     rc |= inv_imu_set_accel_mode(&icm_driver, PWR_MGMT0_ACCEL_MODE_LP);
-	rc |= inv_imu_select_accel_lp_clk(&icm_driver, SMC_CONTROL_0_ACCEL_LP_CLK_RCOSC);
+    rc |= inv_imu_select_accel_lp_clk(&icm_driver, SMC_CONTROL_0_ACCEL_LP_CLK_RCOSC);
   }
   
   rc |= invn_mag_load_ram_image(&icm_driver, INVN_MAG_USECASE_IMG_OVER_SIF);
@@ -457,7 +461,7 @@ int ICM456xx::startGaf(uint8_t intpin, ICM456xx_irq_handler handler, uint16_t ga
 
 int ICM456xx::getGafData(inv_imu_edmp_gaf_outputs_t& gaf_outputs)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   uint16_t fifo_count;
   uint8_t fifo_data[FIFO_MIRRORING_SIZE]; /* Memory where to store FIFO data */
   uint8_t count = 0;
@@ -480,7 +484,7 @@ int ICM456xx::getGafData(inv_imu_edmp_gaf_outputs_t& gaf_outputs)
 
 int ICM456xx::getGaf_GRVData(float& quatW, float& quatX, float& quatY, float& quatZ)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   inv_imu_edmp_gaf_outputs_t gaf_outputs;
   rc = getGafData(gaf_outputs);
 
@@ -527,8 +531,8 @@ int ICM456xx::getGaf_GMRVData(float& quatW,float& quatX,float& quatY,float& quat
     quatX = (int32_t)gaf_outputs.gmrv_quat_q14[1] / (float)Q14_DIV;
     quatY = (int32_t)gaf_outputs.gmrv_quat_q14[2] / (float)Q14_DIV;
     quatZ = (int32_t)gaf_outputs.gmrv_quat_q14[3] / (float)Q14_DIV;
-	if(gaf_outputs.gmrv_heading_valid)
-		accuracy = (int32_t)gaf_outputs.gmrv_heading_q11 / (float)Q11_DIV;
+    if(gaf_outputs.gmrv_heading_valid)
+        accuracy = (int32_t)gaf_outputs.gmrv_heading_q11 / (float)Q11_DIV;
   } else {
     quatW = 0;
     quatX = 0;
@@ -553,8 +557,8 @@ int ICM456xx::getGaf_RVData(float& quatW, float& quatX, float& quatY, float& qua
     quatX = (int32_t)gaf_outputs.rv_quat_q14[1] / (float)Q14_DIV;
     quatY = (int32_t)gaf_outputs.rv_quat_q14[2] / (float)Q14_DIV;
     quatZ = (int32_t)gaf_outputs.rv_quat_q14[3] / (float)Q14_DIV;
-	if(gaf_outputs.rv_heading_valid)
-		accuracy = (int32_t)gaf_outputs.rv_heading_q11 / (float)Q11_DIV;
+    if(gaf_outputs.rv_heading_valid)
+        accuracy = (int32_t)gaf_outputs.rv_heading_q11 / (float)Q11_DIV;
   }else{
     quatW = 0;
     quatX = 0;
@@ -609,11 +613,11 @@ static int8_t mounting_matrix[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
 
 int ICM456xx::startVocalVibDet(uint8_t intpin, ICM456xx_irq_handler handler)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   inv_imu_edmp_int_state_t apex_int_config;
   inv_imu_edmp_vvd_parameters_t vvd_params;
   inv_imu_int_state_t int_config;
-  inv_imu_int_pin_config_t	int_pin_config;
+  inv_imu_int_pin_config_t    int_pin_config;
 
   pinMode(intpin,INPUT);
   attachInterrupt(intpin,handler,RISING);
@@ -747,7 +751,12 @@ int ICM456xx::CheckVocalVibDet_thresh(void)
 
 #endif
 
-#if (INV_DEVICE_TYPE == INV_TYPE_A1) || (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
+#if (INV_DEVICE_TYPE != INV_TYPE_A2)
+void ICM456xx::initializeSoftIron(const int32_t* src_unit_matrix)
+{
+  memcpy(soft_iron_matrix, src_unit_matrix, sizeof(int32_t) * 9);
+  return;
+}
 
 #define MAG_I2C_ADDR 0x1E
 
@@ -776,7 +785,7 @@ static int wait_for_i2c_master_complete(inv_imu_device_t *icm_driver)
 
 int ICM456xx::setI2CM(void)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   uint8_t data  =0;
   inv_imu_int_state_t int1_config;
 
@@ -793,9 +802,9 @@ int ICM456xx::getDataFromI2CM(uint8_t reg, uint8_t& data)
   /* read register from ICT1531 */
   inv_imu_i2c_master_cfg_t cfg = { .op_cnt   = 1,
                                    .i2c_addr = MAG_I2C_ADDR,
-                                   .op 	  = { /* op[0] */
+                                   .op       = { /* op[0] */
                                              {
-                                               .r_n_w	   = 1,
+                                               .r_n_w       = 1,
                                                .reg_addr = reg,
                                                .len      = 1
                                   } } };
@@ -836,7 +845,7 @@ int ICM456xx::adv_getDataFromFifo(void)
 #if (INV_DEVICE_TYPE == INV_TYPE_A1)
 int ICM456xx::setI2CM_FIFO(uint8_t intpin, ICM456xx_irq_handler handler)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   uint8_t data  =0;
   inv_imu_int_state_t int1_config;
   inv_imu_int_pin_config_t  int_pin_config;
@@ -844,18 +853,18 @@ int ICM456xx::setI2CM_FIFO(uint8_t intpin, ICM456xx_irq_handler handler)
   inv_imu_edmp_apex_parameters_t apex_inputs;
   uint8_t wdata = 0x12;
 
-  inv_imu_i2c_master_cfg_t cfg = { .op_cnt	= 2,
+  inv_imu_i2c_master_cfg_t cfg = { .op_cnt    = 2,
                                    .i2c_addr = MAG_I2C_ADDR,
-                                   .op	  = { /* op[0] */
+                                   .op      = { /* op[0] */
                                             {
                                                  .r_n_w    = 1,
                                                  .reg_addr = ICT1531X_TEMP_DATA_MSB,
-                                                 .len	   = 7
+                                                 .len       = 7
                                             },
                                             {
                                                  .r_n_w    = 0,
                                                  .reg_addr = ICT1531X_MODE_CTRL_REG,
-                                                 .len	   = 1,
+                                                 .len       = 1,
                                                  .wdata = &wdata
                                             }
                                   } };
@@ -912,7 +921,7 @@ int ICM456xx::setI2CM_FIFO(uint8_t intpin, ICM456xx_irq_handler handler)
 
 int ICM456xx::getAdvDataFromFifo(int32_t *accel, int32_t *gyro, float *external)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   uint16_t fifo_count;
   const fifo_header_t *    header;
   const fifo_header2_t *   header2;
@@ -960,9 +969,9 @@ int ICM456xx::getExternalMagData(float *mag)
   /* read register from ICT1531 */
   inv_imu_i2c_master_cfg_t cfg = { .op_cnt   = 1,
                                    .i2c_addr = MAG_I2C_ADDR,
-                                   .op 	  = { /* op[0] */
+                                   .op       = { /* op[0] */
                                             {
-                                               .r_n_w	   = 1,
+                                               .r_n_w       = 1,
                                                .reg_addr = ICT1531X_MAG_DATA_X_LSB,
                                                .len      = 6
                                  } } };
@@ -996,7 +1005,7 @@ static void sensor_event_cb(inv_imu_sensor_event_t *event)
     accel_data[1] = event->accel[1];
     accel_data[2] = event->accel[2];
   }
-	
+
   if(event->sensor_mask & (1 << INV_SENSOR_GYRO))
   {
     gyro_data[0] = event->gyro[0];
@@ -1006,7 +1015,7 @@ static void sensor_event_cb(inv_imu_sensor_event_t *event)
 
 #if (INV_DEVICE_TYPE == INV_TYPE_A2)
   if ((event->sensor_mask & (1 << INV_SENSOR_ES0)) &&
-	  (event->sensor_mask & (1 << INV_SENSOR_ES1))) {
+      (event->sensor_mask & (1 << INV_SENSOR_ES1))) {
     inv_imu_sensor_data_t data;
     inv_imu_get_register_data(icm_driver_ptr, &data);
 
@@ -1017,7 +1026,7 @@ static void sensor_event_cb(inv_imu_sensor_event_t *event)
     gyro_data[0] = data.gyro_data[0];
     gyro_data[1] = data.gyro_data[1];
     gyro_data[2] = data.gyro_data[2];
-	
+
     gaf_status = inv_imu_edmp_gaf_build_outputs(icm_driver_ptr, (const uint8_t *)event->es0, 
                                                (const uint8_t *)event->es1, &gaf_outputs_internal);
     if(!gaf_status)
@@ -1027,7 +1036,7 @@ static void sensor_event_cb(inv_imu_sensor_event_t *event)
   if(event->sensor_mask & (1 << INV_SENSOR_ES0))
   {
     int16_t external_data[3];
-	
+
     external_data[0] = (((int16_t)event->es0[1]) << 8) + event->es0[0];
     external_data[1] = (((int16_t)event->es0[3]) << 8) + event->es0[2];
     external_data[2] = (((int16_t)event->es0[5]) << 8) + event->es0[4];
@@ -1051,16 +1060,15 @@ static void sensor_event_cb(inv_imu_sensor_event_t *event)
 #endif
 }
 
-#if (INV_DEVICE_TYPE == INV_TYPE_A2) || (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
-
+#if (INV_DEVICE_TYPE != INV_TYPE_A1)
 static void fixedpoint_to_float(const int32_t *in, float *out, const uint8_t fxp_shift,
                                 const uint8_t dim)
 {
-	int   i;
-	float scale = 1.f / (1 << fxp_shift);
+    int   i;
+    float scale = 1.f / (1 << fxp_shift);
 
-	for (i = 0; i < dim; i++)
-		out[i] = scale * in[i];
+    for (i = 0; i < dim; i++)
+        out[i] = scale * in[i];
 }
 
 
@@ -1068,27 +1076,33 @@ int ICM456xx::getCalibratedMag(float& mX, float& mY, float& mZ)
 {
   int32_t raw_q16[3];
   float mag_ut[3];
+  int rc = INV_ERROR_SUCCESS;
 #if (INV_DEVICE_TYPE == INV_TYPE_C1)
   if(gaf_outputs_internal.rmag_valid)
   {
-    raw_q16[0] = (int32_t)gaf_outputs_internal.rmag[0] * RAW_MAG_SCALE_Q16;
-    raw_q16[1] = (int32_t)gaf_outputs_internal.rmag[1] * RAW_MAG_SCALE_Q16;
-    raw_q16[2] = (int32_t)gaf_outputs_internal.rmag[2] * RAW_MAG_SCALE_Q16;
+    raw_q16[0] = (int32_t)gaf_outputs_internal.rmag[0] * RAW_MAG_SCALE_Q16 - mag_bias_q16[0];
+    raw_q16[1] = (int32_t)gaf_outputs_internal.rmag[1] * RAW_MAG_SCALE_Q16 - mag_bias_q16[1];
+    raw_q16[2] = (int32_t)gaf_outputs_internal.rmag[2] * RAW_MAG_SCALE_Q16 - mag_bias_q16[2];
   }
+  else
+    rc |= INV_ERROR;
   
   if(gaf_outputs_internal.mag_bias_valid)
   {
-    raw_q16[0] -= gaf_outputs_internal.mag_bias_q16[0];
-    raw_q16[1] -= gaf_outputs_internal.mag_bias_q16[1];
-    raw_q16[2] -= gaf_outputs_internal.mag_bias_q16[2];
+    mag_bias_q16[0] = gaf_outputs_internal.mag_bias_q16[0];
+    mag_bias_q16[1] = gaf_outputs_internal.mag_bias_q16[1];
+    mag_bias_q16[2] = gaf_outputs_internal.mag_bias_q16[2];
   }
 
-  fixedpoint_to_float(raw_q16, mag_ut, 16, 3);
-  mX = mag_ut[0];
-  mY = mag_ut[1];
-  mZ = mag_ut[2];
+  if(rc == INV_ERROR_SUCCESS)
+  {
+    fixedpoint_to_float(raw_q16, mag_ut, 16, 3);
+    mX = mag_ut[0];
+    mY = mag_ut[1];
+    mZ = mag_ut[2];
+  }
 #endif
-  return 0;
+  return rc;
 }
 
 int ICM456xx::getCalibratedAccel(float& aX, float& aY, float& aZ)
@@ -1104,7 +1118,7 @@ int ICM456xx::getCalibratedAccel(float& aX, float& aY, float& aZ)
   aX = accel_ut[0];
   aY = accel_ut[1];
   aZ = accel_ut[2];
-	
+
   return 0;
 }
 
@@ -1130,7 +1144,7 @@ int ICM456xx::getCalibratedGyro(float& gX, float& gY, float& gZ)
   gX = gyro_ut[0];
   gY = gyro_ut[1];
   gZ = gyro_ut[2];
-  
+
   return 0;
 }
 
@@ -1138,7 +1152,7 @@ int ICM456xx::getCalibratedGyro(float& gX, float& gY, float& gZ)
 
 int ICM456xx::setApexInterrupt(uint8_t intpin, ICM456xx_irq_handler handler)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   inv_imu_int_state_t config_int;
   inv_imu_int_pin_config_t int_pin_config;
   inv_imu_edmp_int_state_t apex_int_config;
@@ -1211,7 +1225,7 @@ int ICM456xx::setApexInterrupt(uint8_t intpin, ICM456xx_irq_handler handler)
 
 int ICM456xx::startAPEX(dmp_ext_sen_odr_cfg_apex_odr_t edmp_odr, accel_config0_accel_odr_t accel_odr)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
 
   if(edmp_odr == NULL && accel_odr == NULL)
   {
@@ -1225,7 +1239,7 @@ int ICM456xx::startAPEX(dmp_ext_sen_odr_cfg_apex_odr_t edmp_odr, accel_config0_a
       accel_odr = ACCEL_CONFIG0_ACCEL_ODR_400_HZ;
 #endif
     }
-	else if(apex_enable[ICM456XX_APEX_TAP])
+    else if(apex_enable[ICM456XX_APEX_TAP])
     {
       edmp_odr = DMP_EXT_SEN_ODR_CFG_APEX_ODR_400_HZ;
       accel_odr = ACCEL_CONFIG0_ACCEL_ODR_400_HZ;
@@ -1298,8 +1312,8 @@ int ICM456xx::startAPEX(dmp_ext_sen_odr_cfg_apex_odr_t edmp_odr, accel_config0_a
   {
     inv_imu_edmp_tap_parameters_t tap_parameters;
     rc |= inv_imu_edmp_get_tap_parameters(&icm_driver, &tap_parameters);
-    tap_parameters.tap_tmax			 = TAP_TMAX_400HZ;
-    tap_parameters.tap_tmin			 = TAP_TMIN_400HZ;
+    tap_parameters.tap_tmax             = TAP_TMAX_400HZ;
+    tap_parameters.tap_tmin             = TAP_TMIN_400HZ;
     tap_parameters.tap_smudge_reject_th = TAP_SMUDGE_REJECT_THR_400HZ;
     tap_parameters.tap_max = 3; // we want to be able to detect triple tap
     tap_parameters.tap_min = 1; // we want to be able to detect single tap
@@ -1390,7 +1404,7 @@ int ICM456xx::startAPEX(dmp_ext_sen_odr_cfg_apex_odr_t edmp_odr, accel_config0_a
 
 int ICM456xx::startTiltDetection(uint8_t intpin, ICM456xx_irq_handler handler)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
 
 #if (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
   return 0;
@@ -1408,10 +1422,10 @@ int ICM456xx::startTiltDetection(uint8_t intpin, ICM456xx_irq_handler handler)
 
 int ICM456xx::startPedometer(uint8_t intpin, ICM456xx_irq_handler handler)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   
 #if (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
-	return 0;
+    return 0;
 #endif
 
   apex_enable[ICM456XX_APEX_PEDOMETER] = true;
@@ -1427,10 +1441,10 @@ int ICM456xx::startPedometer(uint8_t intpin, ICM456xx_irq_handler handler)
 
 int ICM456xx::startRaiseToWake(uint8_t intpin, ICM456xx_irq_handler handler)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
 
 #if (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
-	return 0;
+    return 0;
 #endif
 
   apex_enable[ICM456XX_APEX_R2W] = true;
@@ -1461,7 +1475,7 @@ int ICM456xx::getTilt(void)
 
 int ICM456xx::getPedometer(uint32_t& step_count, float& step_cadence, char*& activity)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
 
   if(apex_enable[ICM456XX_APEX_PEDOMETER] == false)
     return INV_ERROR;
@@ -1524,7 +1538,7 @@ int ICM456xx::getRaiseToWake(void)
 
 int ICM456xx::startFreeFall(uint8_t intpin, ICM456xx_irq_handler handler)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
 
   apex_enable[ICM456XX_APEX_FF] = true;
 
@@ -1538,7 +1552,7 @@ int ICM456xx::startFreeFall(uint8_t intpin, ICM456xx_irq_handler handler)
 
 int ICM456xx::startHighG(uint8_t intpin, ICM456xx_irq_handler handler)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
 
   apex_enable[ICM456XX_APEX_HIGHG] = true;
 
@@ -1552,7 +1566,7 @@ int ICM456xx::startHighG(uint8_t intpin, ICM456xx_irq_handler handler)
 
 int ICM456xx::startLowG(uint8_t intpin, ICM456xx_irq_handler handler)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
 
   apex_enable[ICM456XX_APEX_LOWG] = true;
 
@@ -1566,7 +1580,7 @@ int ICM456xx::startLowG(uint8_t intpin, ICM456xx_irq_handler handler)
 
 int ICM456xx::startWakeOnMotion(uint8_t intpin, ICM456xx_irq_handler handler, int odr)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   inv_imu_int_state_t config_int;
 
   rc |= setApexInterrupt(intpin, handler);
@@ -1596,7 +1610,7 @@ int ICM456xx::startWakeOnMotion(uint8_t intpin, ICM456xx_irq_handler handler, in
 
 int ICM456xx::startTap(uint8_t intpin, ICM456xx_irq_handler handler)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
 
   apex_enable[ICM456XX_APEX_TAP] = true;
 
@@ -1610,7 +1624,7 @@ int ICM456xx::startTap(uint8_t intpin, ICM456xx_irq_handler handler)
 
 int ICM456xx::startB2S(uint8_t intpin, ICM456xx_irq_handler handler)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
 
   apex_enable[ICM456XX_APEX_B2S] = true;
 
@@ -1624,7 +1638,7 @@ int ICM456xx::startB2S(uint8_t intpin, ICM456xx_irq_handler handler)
 
 int ICM456xx::startAID(uint8_t intpin, ICM456xx_irq_handler handler)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
 
   apex_enable[ICM456XX_APEX_AID] = true;
 
@@ -1639,7 +1653,7 @@ int ICM456xx::startAID(uint8_t intpin, ICM456xx_irq_handler handler)
 
 int ICM456xx::getTap(uint8_t& tap_count, uint8_t& axis, uint8_t& direction)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
 
   if(apex_enable[ICM456XX_APEX_TAP] == false)
     return INV_ERROR;
@@ -1661,7 +1675,7 @@ int ICM456xx::getTap(uint8_t& tap_count, uint8_t& axis, uint8_t& direction)
 
 int ICM456xx::getFreefall(uint32_t& duration_ms)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
 
   if(apex_enable[ICM456XX_APEX_FF] == false)
     return INV_ERROR;
@@ -1669,10 +1683,10 @@ int ICM456xx::getFreefall(uint32_t& duration_ms)
   rc |= updateApex();
 
   if (apex_status.INV_FF) {
-	uint16_t duration;
+    uint16_t duration;
     apex_status.INV_FF = 0;
     rc |= inv_imu_edmp_get_ff_data(&icm_driver, &duration);
-	duration_ms = (duration * 2500) / 1000;
+    duration_ms = (duration * 2500) / 1000;
     return true;
   } else {
     return false;
@@ -1681,7 +1695,7 @@ int ICM456xx::getFreefall(uint32_t& duration_ms)
 
 int ICM456xx::getHighG(void)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
 
   if(apex_enable[ICM456XX_APEX_HIGHG] == false)
     return INV_ERROR;
@@ -1698,7 +1712,7 @@ int ICM456xx::getHighG(void)
 
 int ICM456xx::getLowG(void)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
 
   if(apex_enable[ICM456XX_APEX_LOWG] == false)
     return INV_ERROR;
@@ -1706,7 +1720,7 @@ int ICM456xx::getLowG(void)
   rc |= updateApex();
 
   if (apex_status.INV_LOWG) {
-    apex_status.INV_LOWG = 0;  	
+    apex_status.INV_LOWG = 0;      
     return true;
   } else {
     return false;
@@ -1715,7 +1729,7 @@ int ICM456xx::getLowG(void)
 
 int ICM456xx::getB2S(void)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
 
   if(apex_enable[ICM456XX_APEX_B2S] == false)
     return INV_ERROR;
@@ -1737,7 +1751,7 @@ int ICM456xx::getB2S(void)
 
 int ICM456xx::getAID_Device(void)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   uint8_t output_state;
 
   if(apex_enable[ICM456XX_APEX_AID] == false)
@@ -1748,11 +1762,11 @@ int ICM456xx::getAID_Device(void)
 #if (INV_DEVICE_TYPE == INV_TYPE_B1)
   if (apex_status.INV_AID_DEVICE) {
     apex_status.INV_AID_DEVICE = 0;
-	rc |= inv_imu_edmp_get_aid_data_device(&icm_driver, &output_state);
-	/*	Decision taken by the algorithm,
-	    1 => activity is detected, 
-	    2=> inactivity is detected, 
-	    6=> inactivity and sedentary alert are detected */
+    rc |= inv_imu_edmp_get_aid_data_device(&icm_driver, &output_state);
+    /*    Decision taken by the algorithm,
+        1 => activity is detected, 
+        2=> inactivity is detected, 
+        6=> inactivity and sedentary alert are detected */
     return output_state;
   }
 #endif
@@ -1761,7 +1775,7 @@ int ICM456xx::getAID_Device(void)
 
 int ICM456xx::getAID_Human(void)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   uint8_t output_state;
 
   if(apex_enable[ICM456XX_APEX_AID] == false)
@@ -1772,11 +1786,11 @@ int ICM456xx::getAID_Human(void)
 #if (INV_DEVICE_TYPE == INV_TYPE_B1)
   if (apex_status.INV_AID_HUMAN) {
     apex_status.INV_AID_HUMAN = 0;
-	rc |= inv_imu_edmp_get_aid_data_human(&icm_driver, &output_state);
-	/*	Decision taken by the algorithm,
-	    1 => activity is detected, 
-	    2=> inactivity is detected, 
-	    6=> inactivity and sedentary alert are detected */
+    rc |= inv_imu_edmp_get_aid_data_human(&icm_driver, &output_state);
+    /*    Decision taken by the algorithm,
+        1 => activity is detected, 
+        2=> inactivity is detected, 
+        6=> inactivity and sedentary alert are detected */
     return output_state;
   }
 #endif
@@ -1785,7 +1799,7 @@ int ICM456xx::getAID_Human(void)
 
 int ICM456xx::updateApex(void)
 {
-  int rc = 0;
+  int rc = INV_ERROR_SUCCESS;
   inv_imu_int_state_t      int_state;
   inv_imu_edmp_int_state_t apex_state = { 0 };
 
