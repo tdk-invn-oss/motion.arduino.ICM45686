@@ -57,7 +57,7 @@ static uint32_t clk_freq = 0;
 bool I2CM_EXAM = false;
 int32_t accel_data[3];
 int32_t gyro_data[3];
-float mag_data[3];
+int32_t mag_data[3];
 
 /*
  * WOM threshold value in mg.
@@ -842,7 +842,30 @@ int ICM456xx::adv_getDataFromFifo(void)
   return 0;
 }
 
-#if (INV_DEVICE_TYPE == INV_TYPE_A1)
+#if (INV_DEVICE_TYPE != INV_TYPE_A1)
+static int inv_imu_edmp_compass_set_frequency(inv_imu_device_t *                  s,
+                                       const dmp_ext_sen_odr_cfg_ext_odr_t frequency)
+{
+  int                   status = INV_IMU_OK;
+  dmp_ext_sen_odr_cfg_t dmp_ext_sen_odr_cfg;
+  int_i2cm_source_t     int_i2cm_source;
+
+  /* Get data from EDMP and FIFO : enable external sensor */
+  status |= inv_imu_read_reg(s, DMP_EXT_SEN_ODR_CFG, 1, (uint8_t *)&dmp_ext_sen_odr_cfg);
+  dmp_ext_sen_odr_cfg.ext_sensor_en = 1;
+  dmp_ext_sen_odr_cfg.ext_odr       = frequency;
+  status |= inv_imu_write_reg(s, DMP_EXT_SEN_ODR_CFG, 1, (uint8_t *)&dmp_ext_sen_odr_cfg);
+
+  /* Trigger I2CM by internal odr event */
+  /* int_status_i2cm_smc_ext_odr_en = 1, enable external sensor odr interrupt */
+  status |= inv_imu_read_reg(s, INT_I2CM_SOURCE, 1, (uint8_t *)&int_i2cm_source);
+  int_i2cm_source.int_status_i2cm_smc_ext_odr_en = 1;
+  status |= inv_imu_write_reg(s, INT_I2CM_SOURCE, 1, (uint8_t *)&int_i2cm_source);
+
+  return status;
+}
+#endif // INV_DEVICE_TYPE != INV_TYPE_A1
+
 int ICM456xx::setI2CM_FIFO(uint8_t intpin, ICM456xx_irq_handler handler)
 {
   int rc = INV_ERROR_SUCCESS;
@@ -850,7 +873,6 @@ int ICM456xx::setI2CM_FIFO(uint8_t intpin, ICM456xx_irq_handler handler)
   inv_imu_int_state_t int1_config;
   inv_imu_int_pin_config_t  int_pin_config;
   inv_imu_adv_fifo_config_t fifo_config;
-  inv_imu_edmp_apex_parameters_t apex_inputs;
   uint8_t wdata = 0x12;
 
   inv_imu_i2c_master_cfg_t cfg = { .op_cnt    = 2,
@@ -898,28 +920,30 @@ int ICM456xx::setI2CM_FIFO(uint8_t intpin, ICM456xx_irq_handler handler)
   rc = invn_mag_init(&icm_driver);
   rc |= inv_imu_edmp_compass_set_frequency(&icm_driver, DMP_EXT_SEN_ODR_CFG_EXT_ODR_25_HZ);
   rc |= inv_imu_configure_i2cm(&icm_driver, &cfg, NULL);
-  
+
+#if (INV_DEVICE_TYPE == INV_TYPE_A1)
   /* Run eDMP init and load RAM image */
   rc |= inv_imu_edmp_compass_init(&icm_driver);
 
   /* Configure eDMP to get compass data from external sensor */
   rc |= inv_imu_edmp_compass_enable_es(&icm_driver);
+
+  /* Enable eDMP */
+  rc |= inv_imu_edmp_enable(&icm_driver);
+ 
+  /* Let dmp see ODR ready on ISR1, ISR0 all off */
+  rc |= inv_imu_edmp_unmask_int_src(&icm_driver, INV_IMU_EDMP_INT1, EDMP_INT_SRC_EXT_ODR_DRDY_MASK);
+ #endif
   
   /* Reset FIFO */
   rc |= inv_imu_adv_reset_fifo(&icm_driver);
-  
-  /* Enable eDMP */
-  rc |= inv_imu_edmp_enable(&icm_driver);
-  
-  /* Let dmp see ODR ready on ISR1, ISR0 all off */
-  rc |= inv_imu_edmp_unmask_int_src(&icm_driver, INV_IMU_EDMP_INT1, EDMP_INT_SRC_EXT_ODR_DRDY_MASK);
-
+ 
   rc |= setup_irq(intpin, handler);
   
   return rc;  
 }
 
-int ICM456xx::getAdvDataFromFifo(int32_t *accel, int32_t *gyro, float *external)
+int ICM456xx::getAdvDataFromFifo(int32_t *accel, int32_t *gyro, int32_t *external)
 {
   int rc = INV_ERROR_SUCCESS;
   uint16_t fifo_count;
@@ -965,6 +989,7 @@ int ICM456xx::getExternalMagData(float *mag)
   int rc;
   uint8_t data[6];
   int16_t external_data[3];
+  float mag_data[3];
    
   /* read register from ICT1531 */
   inv_imu_i2c_master_cfg_t cfg = { .op_cnt   = 1,
@@ -992,8 +1017,6 @@ int ICM456xx::getExternalMagData(float *mag)
 
   return rc;
 }
-
-#endif /* INV_TYPE_A1 */
 #endif /* INV_TYPE_A1 & INV_TYPE_C1 */
 
 /* FIFO sensor event callback */
@@ -1032,7 +1055,7 @@ static void sensor_event_cb(inv_imu_sensor_event_t *event)
     if(!gaf_status)
       gaf_status = 1;
   }
-#elif (INV_DEVICE_TYPE == INV_TYPE_A1)
+#else
   if(event->sensor_mask & (1 << INV_SENSOR_ES0))
   {
     int16_t external_data[3];
@@ -1041,12 +1064,13 @@ static void sensor_event_cb(inv_imu_sensor_event_t *event)
     external_data[1] = (((int16_t)event->es0[3]) << 8) + event->es0[2];
     external_data[2] = (((int16_t)event->es0[5]) << 8) + event->es0[4];
 
-    mag_data[0] = external_data[0] * RAW_MAG_SCALE;
-    mag_data[1] = external_data[1] * RAW_MAG_SCALE;
-    mag_data[2] = external_data[2] * RAW_MAG_SCALE;
+    mag_data[0] = external_data[0];
+    mag_data[1] = external_data[1];
+    mag_data[2] = external_data[2];
   }
+#endif // INV_DEVICE_TYPE == INV_TYPE_A2
 
-#elif (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
+#if (INV_DEVICE_TYPE == INV_TYPE_B1) || (INV_DEVICE_TYPE == INV_TYPE_C1)
   if (event->sensor_mask & ((1 << INV_SENSOR_ES0) | (1 << INV_SENSOR_ES1)) == ((1 << INV_SENSOR_ES0) | (1 << INV_SENSOR_ES1)))
   {
     inv_imu_edmp_gaf_decode_fifo(icm_driver_ptr, (const uint8_t *)event->es0,
@@ -1057,7 +1081,7 @@ static void sensor_event_cb(inv_imu_sensor_event_t *event)
     gaf_status = 1;
 #endif
   }
-#endif
+#endif // INV_DEVICE_TYPE == INV_TYPE_B1 || (INV_DEVICE_TYPE == INV_TYPE_C1
 }
 
 #if (INV_DEVICE_TYPE != INV_TYPE_A1)

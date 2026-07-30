@@ -406,7 +406,7 @@ This method read accel/gyro/external sensor data from FIFO frame
 
 # Available Sketches
 
-**AUX_I2C_FIFO**
+**AUX_I2C_FIFO_SPI**
 
 This sketch initializes the ICM456xx with the SPI interface, and running the AUX1 to I2CM mode. Host get the raw external sensor(compass) data via I2CM and send it to IMU FIFO.
 It loads extended features eDMP RAM image, handling ICT1531 data.

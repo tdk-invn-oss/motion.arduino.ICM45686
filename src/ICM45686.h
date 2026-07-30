@@ -133,10 +133,8 @@ class ICM456xx {
     int getDataFromI2CM(uint8_t reg, uint8_t& data);
     int getDataFromPassThrough(uint8_t reg, uint8_t& data);
     void initializeSoftIron(const int32_t* src_unit_matrix);
-#endif
-#if (INV_DEVICE_TYPE == INV_TYPE_A1)
     int setI2CM_FIFO(uint8_t intpin, ICM456xx_irq_handler handler);
-    int getAdvDataFromFifo(int32_t *accel, int32_t *gyro, float *external);
+    int getAdvDataFromFifo(int32_t *accel, int32_t *gyro, int32_t *external);
     int getExternalMagData(float *mag);
     int initMag(void);
     int enableMag(int flag);
