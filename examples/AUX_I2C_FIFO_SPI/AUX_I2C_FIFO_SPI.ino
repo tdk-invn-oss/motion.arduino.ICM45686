@@ -25,6 +25,9 @@ ICM456xx IMU(SPI,8);
 #define MAX_LSB        32768
 #define RAW_MAG_SCALE  0.075
 
+#define TEMP_SCALE_FACTOR 2.0
+#define TEMP_OFFSET_C     25.0
+
 volatile uint8_t irq_received = 0;
 
 void irq_handler(void) {
@@ -54,11 +57,12 @@ void setup() {
 void loop() {
   // Wait for interrupt to read data from fifo
   if(irq_received) {
-    int32_t accel[3], gyro[3], external[3];
+    int32_t accel[3], gyro[3], external[3], temp;
     float data[3] = { 0 };
+    float temp_degc = 0;
     int ret = 0;
     irq_received = 0;
-    ret = IMU.getAdvDataFromFifo(accel, gyro, external);
+    ret = IMU.getAdvDataFromFifo(accel, gyro, external, &temp);
 
     data[0]  = (float)(accel[0] * ACCEL_FSR_G) / MAX_LSB;
     data[1]  = (float)(accel[1] * ACCEL_FSR_G) / MAX_LSB;
@@ -85,6 +89,9 @@ void loop() {
     // print mag raw to uT
     Serial.print(" MagX:"); Serial.print(data[0]); Serial.print(",");
     Serial.print("MagY:"); Serial.print(data[1]); Serial.print(",");
-    Serial.print("MagZ:"); Serial.println(data[2]);
+    Serial.print("MagZ:"); Serial.print(data[2]); 
+
+    temp_degc = ((float)temp / TEMP_SCALE_FACTOR) + TEMP_OFFSET_C;
+    Serial.print(" Temperature:"); Serial.println(temp_degc);
   }
 }

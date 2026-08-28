@@ -58,6 +58,7 @@ bool I2CM_EXAM = false;
 int32_t accel_data[3];
 int32_t gyro_data[3];
 int32_t mag_data[3];
+int32_t temp_data;
 
 /*
  * WOM threshold value in mg.
@@ -943,7 +944,7 @@ int ICM456xx::setI2CM_FIFO(uint8_t intpin, ICM456xx_irq_handler handler)
   return rc;  
 }
 
-int ICM456xx::getAdvDataFromFifo(int32_t *accel, int32_t *gyro, int32_t *external)
+int ICM456xx::getAdvDataFromFifo(int32_t *accel, int32_t *gyro, int32_t *external, int32_t * temp)
 {
   int rc = INV_ERROR_SUCCESS;
   uint16_t fifo_count;
@@ -966,6 +967,7 @@ int ICM456xx::getAdvDataFromFifo(int32_t *accel, int32_t *gyro, int32_t *externa
   memcpy(accel, accel_data, sizeof(accel_data));
   memcpy(gyro, gyro_data, sizeof(gyro_data));
   memcpy(external, mag_data, sizeof(mag_data));
+  temp[0] = temp_data;
 
   return rc;
 }
@@ -1034,6 +1036,11 @@ static void sensor_event_cb(inv_imu_sensor_event_t *event)
     gyro_data[0] = event->gyro[0];
     gyro_data[1] = event->gyro[1];
     gyro_data[2] = event->gyro[2];  
+  }
+
+  if(event->sensor_mask & (1 << INV_SENSOR_TEMPERATURE))
+  {
+      temp_data = event->temperature;
   }
 
 #if (INV_DEVICE_TYPE == INV_TYPE_A2)
