@@ -73,13 +73,8 @@ int32_t temp_data;
 #define Q16_DIV (1<<16)
 #define Q30_DIV (1<<30)
 
-#define ACCEL_FSR_G        (4)
-#define RAW_ACC_SCALE      (ACCEL_FSR_G /* gee */ * 2 /* / 32768 * (1<<16)) */)
-#define GYRO_FSR_DPS       (2000)
-#define RAW_GYR_SCALE      (GYRO_FSR_DPS /* dps */ * 2 /* / (1<<15) * (1<<16)) */)
 #define RAW_MAG_SCALE      0.075
 #define RAW_MAG_SCALE_Q16  4915  /* 0.075 * (1 << 16) */
-
 
 #if (INV_DEVICE_TYPE != INV_TYPE_A1)
 // GAF output aggregartion
@@ -183,6 +178,8 @@ int ICM456xx::begin() {
 
 int ICM456xx::startAccel(uint16_t odr, uint16_t fsr) {
   int rc = INV_ERROR_SUCCESS;
+
+  accel_fsr = fsr;
   rc |= inv_imu_set_accel_fsr(&icm_driver, accel_fsr_g_to_param(fsr));
   rc |= inv_imu_set_accel_frequency(&icm_driver, accel_freq_to_param(odr));
   rc |= inv_imu_set_accel_mode(&icm_driver, PWR_MGMT0_ACCEL_MODE_LN);
@@ -191,6 +188,8 @@ int ICM456xx::startAccel(uint16_t odr, uint16_t fsr) {
 
 int ICM456xx::startGyro(uint16_t odr, uint16_t fsr) {
   int rc = INV_ERROR_SUCCESS;
+
+  gyro_fsr = fsr;
   rc |= inv_imu_set_gyro_fsr(&icm_driver, gyro_fsr_dps_to_param(fsr));
   rc |= inv_imu_set_gyro_frequency(&icm_driver, gyro_freq_to_param(odr));
   rc |= inv_imu_set_gyro_mode(&icm_driver, PWR_MGMT0_GYRO_MODE_LN);
@@ -1141,9 +1140,9 @@ int ICM456xx::getCalibratedAccel(float& aX, float& aY, float& aZ)
   int32_t raw_q16[3];
   float accel_ut[3];
 
-  raw_q16[0] = (int32_t)accel_data[0] * RAW_ACC_SCALE - acc_bias_q16[0];
-  raw_q16[1] = (int32_t)accel_data[1] * RAW_ACC_SCALE - acc_bias_q16[1];
-  raw_q16[2] = (int32_t)accel_data[2] * RAW_ACC_SCALE - acc_bias_q16[2];
+  raw_q16[0] = ((int32_t)accel_data[0] * accel_fsr * 2) - acc_bias_q16[0];
+  raw_q16[1] = ((int32_t)accel_data[1] * accel_fsr * 2) - acc_bias_q16[1];
+  raw_q16[2] = ((int32_t)accel_data[2] * accel_fsr * 2) - acc_bias_q16[2];
 
   fixedpoint_to_float(raw_q16, accel_ut, 16, 3);
   aX = accel_ut[0];
@@ -1158,9 +1157,9 @@ int ICM456xx::getCalibratedGyro(float& gX, float& gY, float& gZ)
   int32_t raw_q16[3];
   float gyro_ut[3];
 
-  raw_q16[0] = (int32_t)gyro_data[0] * RAW_GYR_SCALE;
-  raw_q16[1] = (int32_t)gyro_data[1] * RAW_GYR_SCALE;
-  raw_q16[2] = (int32_t)gyro_data[2] * RAW_GYR_SCALE;
+  raw_q16[0] = (int32_t)gyro_data[0] * gyro_fsr * 2;
+  raw_q16[1] = (int32_t)gyro_data[1] * gyro_fsr * 2;
+  raw_q16[2] = (int32_t)gyro_data[2] * gyro_fsr * 2;
 
 #if (INV_DEVICE_TYPE == INV_TYPE_C1)
   if(gaf_outputs_internal.gyr_bias_valid)

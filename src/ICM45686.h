@@ -196,6 +196,8 @@ class ICM456xx {
     int32_t acc_bias_q16[3]; //customer bias
     int32_t mag_bias_q16[3];
 #endif
+    uint16_t accel_fsr;
+    uint16_t gyro_fsr;
 };
 
 #endif // ICM456xx_H
