@@ -1888,6 +1888,9 @@ static int i2c_read(void *context, uint8_t reg, uint8_t * rbuffer, uint32_t rlen
     uint16_t rx_bytes = 0;
     uint8_t length = ((rlen - offset) > ARDUINO_I2C_BUFFER_LENGTH) ? ARDUINO_I2C_BUFFER_LENGTH : (rlen - offset) ;
     rx_bytes = instance->i2c->requestFrom(instance->i2c_address, length);
+    if (rx_bytes == 0) {
+      break;    // device not present or not responding
+    }
     if (rx_bytes == length) {
       for(uint8_t i = 0; i < length; i++) {
         rbuffer[offset+i] = instance->i2c->read();
